@@ -41,6 +41,35 @@ router.post('/', async (req, res) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
+
+        // One-time payment checkout
+        if (session.mode === 'payment') {
+          const { userId, planId, credits } = session.metadata || {};
+          if (!userId || !planId || !credits) {
+            console.warn('[stripe webhook] one-time checkout missing metadata', session.id);
+            break;
+          }
+          const creditsNum = parseInt(credits, 10);
+          if (!creditsNum || creditsNum <= 0) break;
+
+          const result = await grantCredits({
+            userId,
+            amount: creditsNum,
+            addedBy: userId,
+            addedByRole: 'payment',
+            description: `One-time pack credits — session ${session.id}`,
+            paymentIntentId: session.payment_intent || session.id,
+            planId,
+          });
+          if (result.duplicate) {
+            console.log('[stripe webhook] one-time checkout already fulfilled', session.id);
+          } else {
+            console.log('[stripe webhook] one-time checkout credits granted', session.id, creditsNum);
+          }
+          break;
+        }
+
+        // Recurring subscription checkout
         if (session.mode !== 'subscription' || !session.subscription) break;
 
         const sub = await stripe.subscriptions.retrieve(session.subscription);

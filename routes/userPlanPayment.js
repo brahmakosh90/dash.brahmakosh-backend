@@ -198,6 +198,102 @@ router.post('/payment/by-plan/intent', authenticate, authorize('user'), async (r
 });
 
 /**
+ * One-time pack: Stripe Checkout Session (hosted) in payment mode.
+ * POST body: { planId, successUrl, cancelUrl }
+ */
+router.post('/payment/by-plan/one-time-checkout', authenticate, authorize('user'), async (req, res) => {
+  try {
+    const secret = getStripeSecretKey();
+    if (!secret) {
+      return res.status(503).json({ success: false, message: 'Payment service unavailable' });
+    }
+
+    const { planId, successUrl, cancelUrl } = req.body || {};
+    if (!planId || !mongoose.isValidObjectId(planId)) {
+      return res.status(400).json({ success: false, message: 'Valid planId is required' });
+    }
+
+    const okUrl = successUrl || process.env.STRIPE_CHECKOUT_SUCCESS_URL;
+    const badUrl = cancelUrl || process.env.STRIPE_CHECKOUT_CANCEL_URL;
+    if (!isAbsoluteUrl(okUrl) || !isAbsoluteUrl(badUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'successUrl and cancelUrl must be absolute https URLs',
+      });
+    }
+
+    const fullUser = await User.findById(req.user._id).select('clientId email');
+    const owner = userTenantClientId(fullUser);
+    if (!owner) {
+      return res.status(400).json({ success: false, message: 'User is not linked to a client' });
+    }
+
+    const plan = await SubscriptionPlan.findOne({
+      _id: planId,
+      ownerClient: owner,
+      isEnabled: true,
+      billingType: 'one_time',
+    });
+    if (!plan || plan.offerPriceMinorUnits < 1) {
+      return res.status(404).json({ success: false, message: 'Plan not found or is free' });
+    }
+
+    const credits = plan.resolveCreditsPerGrant();
+    const stripe = new Stripe(secret);
+    const currency = stripeCurrencyFromPlanCurrency(plan.currency);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency,
+          unit_amount: Math.round(plan.offerPriceMinorUnits),
+          product_data: {
+            name: plan.name,
+            description: plan.description || `${credits} credits`,
+          },
+        },
+        quantity: 1,
+      }],
+      success_url: `${okUrl}${okUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: badUrl,
+      customer_email: fullUser.email || undefined,
+      client_reference_id: String(fullUser._id),
+      metadata: {
+        userId: String(fullUser._id),
+        planId: String(plan._id),
+        ownerClientId: String(owner),
+        credits: String(credits),
+        billingType: 'one_time',
+      },
+    });
+
+    await PaymentLog.create({
+      userId: req.user._id,
+      event: 'create_intent',
+      amountCents: plan.offerPriceMinorUnits,
+      credits,
+      status: 'pending',
+      metadata: { planId: String(plan._id), sessionId: session.id, billingType: 'one_time_checkout' },
+    });
+
+    res.json({
+      success: true,
+      checkoutUrl: session.url,
+      sessionId: session.id,
+      publishableKey: getPublishableKey(),
+    });
+  } catch (e) {
+    console.error('[one-time-checkout]', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create checkout session',
+      error: process.env.NODE_ENV === 'development' ? e.message : undefined,
+    });
+  }
+});
+
+/**
  * Recurring plan: Stripe Checkout Session (hosted) in subscription mode.
  * POST body: { planId, successUrl, cancelUrl }
  */
