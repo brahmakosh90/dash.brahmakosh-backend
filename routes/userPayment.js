@@ -54,6 +54,75 @@ const getCreditsPerUnit = async () => {
 };
 
 /**
+ * POST /api/user/payment/legacy-checkout
+ * Stripe Checkout Session for custom INR top-up.
+ */
+router.post('/legacy-checkout', authenticate, authorize('user'), async (req, res) => {
+  try {
+    const stripeSecretKey = getStripeSecretKey();
+    if (!stripeSecretKey) return res.status(503).json({ success: false, message: 'Payment service unavailable' });
+
+    const body = req.body || {};
+    const planAmount = body.planAmount != null ? Number(body.planAmount) : null;
+    const rawAmount = body.amount != null ? Number(body.amount) : null;
+    const amountUnits = planAmount || rawAmount;
+    const usingTrialPlan = planAmount === TRIAL_PLAN_AMOUNT;
+
+    if (!amountUnits || isNaN(amountUnits) || amountUnits <= 0)
+      return res.status(400).json({ success: false, message: 'Valid amount is required' });
+    if (!usingTrialPlan && amountUnits < MIN_AMOUNT_UNITS)
+      return res.status(400).json({ success: false, message: `Minimum amount is ₹${MIN_AMOUNT_UNITS}` });
+    if (amountUnits > MAX_AMOUNT_UNITS)
+      return res.status(400).json({ success: false, message: 'Amount too large' });
+
+    const okUrl = body.successUrl;
+    const badUrl = body.cancelUrl;
+    if (!okUrl || !badUrl)
+      return res.status(400).json({ success: false, message: 'successUrl and cancelUrl are required' });
+
+    const creditsPerUnit = await getCreditsPerUnit();
+    const credits = Math.floor(amountUnits * creditsPerUnit);
+    const stripe = new Stripe(stripeSecretKey);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'inr',
+          unit_amount: Math.round(amountUnits * 100),
+          product_data: { name: `₹${amountUnits} Credits Top-up`, description: `${credits} credits` },
+        },
+        quantity: 1,
+      }],
+      success_url: `${okUrl}${okUrl.includes('?') ? '&' : '?'}session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: badUrl,
+      client_reference_id: String(req.user._id),
+      metadata: {
+        userId: String(req.user._id),
+        credits: String(credits),
+        amountUnits: String(amountUnits),
+        billingType: 'legacy_topup',
+        isTrialPlan: usingTrialPlan ? 'true' : 'false',
+      },
+    });
+
+    await PaymentLog.create({
+      userId: req.user._id,
+      event: 'create_intent',
+      amountCents: Math.round(amountUnits * 100),
+      credits,
+      status: 'pending',
+      metadata: { sessionId: session.id, billingType: 'legacy_topup' },
+    });
+
+    res.json({ success: true, checkoutUrl: session.url, sessionId: session.id });
+  } catch (error) {
+    console.error('[legacy-checkout]', error);
+    res.status(500).json({ success: false, message: 'Failed to create checkout session' });
+  }
+});
+
+/**
  * POST /api/user/payment/create-intent
  * Create Stripe PaymentIntent for credits recharge.
  * Body:

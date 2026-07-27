@@ -42,11 +42,11 @@ router.post('/', async (req, res) => {
       case 'checkout.session.completed': {
         const session = event.data.object;
 
-        // One-time payment checkout
+        // One-time payment checkout (plan pack OR legacy top-up)
         if (session.mode === 'payment') {
-          const { userId, planId, credits } = session.metadata || {};
-          if (!userId || !planId || !credits) {
-            console.warn('[stripe webhook] one-time checkout missing metadata', session.id);
+          const { userId, credits, billingType, planId } = session.metadata || {};
+          if (!userId || !credits) {
+            console.warn('[stripe webhook] payment checkout missing metadata', session.id);
             break;
           }
           const creditsNum = parseInt(credits, 10);
@@ -57,14 +57,16 @@ router.post('/', async (req, res) => {
             amount: creditsNum,
             addedBy: userId,
             addedByRole: 'payment',
-            description: `One-time pack credits — session ${session.id}`,
+            description: billingType === 'legacy_topup'
+              ? `INR top-up — session ${session.id}`
+              : `One-time pack credits — session ${session.id}`,
             paymentIntentId: session.payment_intent || session.id,
-            planId,
+            planId: planId || undefined,
           });
           if (result.duplicate) {
-            console.log('[stripe webhook] one-time checkout already fulfilled', session.id);
+            console.log('[stripe webhook] checkout already fulfilled', session.id);
           } else {
-            console.log('[stripe webhook] one-time checkout credits granted', session.id, creditsNum);
+            console.log('[stripe webhook] credits granted', session.id, creditsNum, result.newBalance);
           }
           break;
         }
