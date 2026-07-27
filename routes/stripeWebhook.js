@@ -44,7 +44,8 @@ router.post('/', async (req, res) => {
         if (session.mode !== 'subscription' || !session.subscription) break;
 
         const sub = await stripe.subscriptions.retrieve(session.subscription);
-        const { userId, planId, ownerClientId } = sub.metadata || {};
+        const { userId, planId, ownerClientId } =
+          (sub.metadata?.userId ? sub.metadata : session.metadata) || {};
         if (!userId || !planId || !ownerClientId) {
           console.warn('[stripe webhook] subscription missing metadata', sub.id);
           break;

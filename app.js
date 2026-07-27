@@ -69,6 +69,8 @@ import userPaymentRoutes           from './routes/userPayment.js';
 import userPlanPaymentRoutes       from './routes/userPlanPayment.js';
 import clientSubscriptionPlansRoutes from './routes/clientSubscriptionPlans.js';
 import stripeWebhookRoutes         from './routes/stripeWebhook.js';
+import adminPaymentRoutes          from './routes/adminPayments.js';
+import clientPaymentRoutes         from './routes/clientPayments.js';
 import storeProxyRoutes            from './routes/storeProxy.js';
 
 // ─── Voice Config & TTS Routes ────────────────────────────────────────────────
@@ -159,7 +161,9 @@ app.use('/api/auth/partner',     partnerPasswordResetRoutes);
 // Core application
 app.use('/api/users',       userRoutes);
 app.use('/api/admin',       adminRoutes);
+app.use('/api/admin/payments', adminPaymentRoutes);
 app.use('/api/client',      clientRoutes);
+app.use('/api/client/payments', clientPaymentRoutes);
 app.use('/api/client/subscription-plans', clientSubscriptionPlansRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 
