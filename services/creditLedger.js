@@ -40,7 +40,7 @@ export async function grantCredits({
     throw new Error('User not found');
   }
 
-  const previousBalance = typeof user.credits === 'number' ? user.credits : 0;
+  const previousBalance = typeof user.credits === 'number' ? Math.floor(user.credits) : 0;
   const newBalance = previousBalance + n;
   user.credits = newBalance;
   await user.save();
