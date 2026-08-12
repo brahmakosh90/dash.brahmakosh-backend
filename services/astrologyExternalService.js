@@ -61,7 +61,19 @@ export const astrologyExternalService = {
 
   async generateKundaliPdf(payload) {
     ensurePdfCreds();
-    const res = await pdfClient.post('/natal_horoscope_report/tropical', payload);
+    const endpointMap = {
+      mini: '/mini_horoscope_pdf/tropical',
+      basic: '/basic_horoscope_pdf/tropical',
+      pro: '/pro_horoscope_pdf/tropical'
+    };
+    const endpoint = endpointMap[payload.report_type] || '/basic_horoscope_pdf/tropical';
+    const res = await pdfClient.post(endpoint, payload);
+    return res.data;
+  },
+
+  async generateMatchMakingPdf(payload) {
+    ensurePdfCreds();
+    const res = await pdfClient.post('/match_making_pdf/tropical', payload);
     return res.data;
   }
 };

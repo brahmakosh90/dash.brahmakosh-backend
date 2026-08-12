@@ -23,7 +23,16 @@ import numerologyService from '../services/numerologyService.js';
 import doshaService from '../services/doshaService.js';
 import remedyService from '../services/remedyService.js';
 import { astrologyExternalService } from '../services/astrologyExternalService.js';
+import { deductCredits } from '../services/creditLedger.js';
 import axios from 'axios';
+
+// Credit costs per report type (1 credit = 1 INR)
+const REPORT_CREDIT_COSTS = {
+  kundali_mini: 2,       // mini_horoscope_pdf = ₹1.5 → 2 credits
+  kundali_basic: 8,      // basic_horoscope_pdf = ₹8
+  kundali_pro: 60,       // pro_horoscope_pdf = ₹60
+  match_making: 25,      // match_making_pdf = ₹25
+};
 import AppSettings from '../models/AppSettings.js';
 import { bustStorageModeCache } from '../utils/storage.js';
 import { uploadBuffer } from '../utils/storage.js';
@@ -2466,6 +2475,15 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       company_mobile: req.body?.company_mobile || process.env.ASTROLOGY_PDF_COMPANY_MOBILE || ''
     };
 
+    // Deduct credits before generating report
+    const creditCost = REPORT_CREDIT_COSTS[`kundali_${rt}`];
+    const deduction = await deductCredits({
+      userId,
+      amount: creditCost,
+      description: `Kundali ${rt} PDF report generation`,
+      reportType: `kundali_${rt}`,
+    });
+
     // 1) Call AstrologyAPI PDF endpoint
     const data = await astrologyExternalService.generateKundaliPdf(payload);
     const providerPdfUrl = data?.pdf_url || data?.url || null;
@@ -2515,6 +2533,8 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
     return res.json({
       success: true,
       reportType: rt,
+      creditsDeducted: creditCost,
+      walletBalance: deduction.newBalance,
       providerResponse: data,
       s3: {
         key: uploadResult.key,
@@ -2524,6 +2544,15 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
     });
   } catch (error) {
     const status = error.status || error.response?.status || 500;
+    if (error.code === 'INSUFFICIENT_CREDITS') {
+      return res.status(402).json({
+        success: false,
+        message: error.message,
+        code: 'INSUFFICIENT_CREDITS',
+        required: error.required,
+        available: error.available
+      });
+    }
     return res.status(status).json({
       success: false,
       message: error.message || 'Failed to generate kundali PDF',
@@ -2632,10 +2661,26 @@ router.post('/users/:userId/reports/match-making', authenticate, authorize('clie
       return res.status(403).json({ success: false, message: 'Astrology tools are disabled by client settings' });
     }
 
+    const deduction = await deductCredits({
+      userId,
+      amount: REPORT_CREDIT_COSTS.match_making,
+      description: 'Match making report generation',
+      reportType: 'match_making',
+    });
+
     const data = await astrologyExternalService.getMatchMakingDetailedReport(req.body || {});
-    return res.json({ success: true, data });
+    return res.json({ success: true, creditsDeducted: REPORT_CREDIT_COSTS.match_making, walletBalance: deduction.newBalance, data });
   } catch (error) {
     const status = error.status || error.response?.status || 500;
+    if (error.code === 'INSUFFICIENT_CREDITS') {
+      return res.status(402).json({
+        success: false,
+        message: error.message,
+        code: 'INSUFFICIENT_CREDITS',
+        required: error.required,
+        available: error.available
+      });
+    }
     return res.status(status).json({
       success: false,
       message: error.message || 'Failed to generate match making report',

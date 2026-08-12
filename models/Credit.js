@@ -31,11 +31,21 @@ const creditSchema = new mongoose.Schema(
     },
     addedByRole: {
       type: String,
-      enum: ['admin', 'super_admin', 'client', 'payment', 'subscription'],
+      enum: ['admin', 'super_admin', 'client', 'payment', 'subscription', 'user'],
       required: true,
     },
     description: {
       type: String,
+    },
+    reportType: {
+      type: String,
+      default: null,
+    },
+    idempotencyKey: {
+      type: String,
+      default: null,
+      sparse: true,
+      index: true,
     },
     paymentIntentId: {
       type: String,
