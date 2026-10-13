@@ -64,6 +64,9 @@ import notificationRoutes          from './routes/notifications.js';
 import alertsRoutes                from './routes/alerts.js';
 import pujaPadhatiRoutes           from './routes/pujaPadhati.js';
 import swapnaDecoderRoutes         from './routes/swapnaDecoder.js';
+import shivPuranRoutes             from './routes/shivPuran.js';
+import ramayanaRoutes              from './routes/ramayana.js';
+import durgaSaptashatiRoutes       from './routes/durgaSaptashati.js';
 import dreamRequestRoutes          from './routes/dreamRequest.js';
 import partnerUserChatRoutes       from './routes/chatRoutes.js';
 import userPaymentRoutes           from './routes/userPayment.js';
@@ -244,6 +247,9 @@ app.use('/api/notifications',             notificationRoutes);
 app.use('/api/alerts',                    alertsRoutes);
 app.use('/api/puja-padhati',              pujaPadhatiRoutes);
 app.use('/api/swapna-decoder',            swapnaDecoderRoutes);
+app.use('/api/shiv-puran',                shivPuranRoutes);
+app.use('/api/ramayana',                  ramayanaRoutes);
+app.use('/api/durga-saptashati',          durgaSaptashatiRoutes);
 app.use('/api/dream-requests',            dreamRequestRoutes);
 
 // Health check
