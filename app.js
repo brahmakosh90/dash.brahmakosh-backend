@@ -254,7 +254,18 @@ app.use('/api/dream-requests',            dreamRequestRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
+  res.json({
+    status: 'OK',
+    message: 'Server is running',
+    whatsapp: {
+      WHATSAPP_ENABLED: process.env.WHATSAPP_ENABLED || 'NOT SET',
+      USE_WHATSAPP_BUSINESS_API: process.env.USE_WHATSAPP_BUSINESS_API || 'NOT SET',
+      WHATSAPP_TOKEN: process.env.WHATSAPP_TOKEN ? 'SET ✅' : 'NOT SET ❌',
+      WHATSAPP_PHONE_ID: process.env.WHATSAPP_PHONE_ID ? 'SET ✅' : 'NOT SET ❌',
+      WHATSAPP_TEMPLATE_NAME: process.env.WHATSAPP_TEMPLATE_NAME || 'NOT SET',
+      GRAPH_VERSION: process.env.GRAPH_VERSION || 'NOT SET',
+    }
+  });
 });
 
 // Error handler
