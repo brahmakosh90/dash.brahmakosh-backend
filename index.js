@@ -22,6 +22,14 @@ server.listen(PORT, () => {
   console.log(`   - Polling:   https://yourdomain.com/socket.io/?EIO=4&transport=polling&token=YOUR_JWT`);
   console.log(`   - WebSocket: https://yourdomain.com/socket.io/?EIO=4&transport=websocket&token=YOUR_JWT`);
   console.log('='.repeat(80) + '\n');
+
+  // Keep-alive: ping self every 30s to prevent Render free tier sleep
+  if (process.env.NODE_ENV === 'production') {
+    const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://dash-brahmakosh-backend.onrender.com/api/health';
+    setInterval(() => {
+      fetch(`${SELF_URL}`).catch(() => {});
+    }, 30 * 1000);
+  }
 });
 
 // Graceful shutdown
