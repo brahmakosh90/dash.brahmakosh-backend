@@ -1,9 +1,28 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import multer from 'multer';
 import Shloka from '../models/Shloka.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
+import { getPresignedUrl, generateUploadUrl, uploadBuffer, extractS3KeyFromUrl } from '../utils/storage.js';
 
 const router = express.Router();
+
+const uploadAudio = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('audio/')) cb(null, true);
+    else cb(new Error('Only audio files are allowed'), false);
+  }
+});
+
+const withSignedUrl = async (shloka) => {
+  const obj = shloka.toObject ? shloka.toObject() : { ...shloka };
+  if (obj.audioUrl) {
+    try { obj.audioUrl = await getPresignedUrl(obj.audioUrl); } catch {}
+  }
+  return obj;
+};
 
 // Helper function to get clientId from user and request
 const getClientId = (user, req = null) => {
@@ -55,9 +74,11 @@ router.get('/', authMiddleware, async (req, res) => {
 
     const total = await Shloka.countDocuments(filter);
 
+    const shlokaData = await Promise.all(shlokas.map(withSignedUrl));
+
     res.json({
       success: true,
-      data: shlokas,
+      data: shlokaData,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / parseInt(limit)),
@@ -103,7 +124,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
     res.json({
       success: true,
-      data: shloka
+      data: await withSignedUrl(shloka)
     });
   } catch (error) {
     res.status(500).json({
@@ -115,7 +136,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST create new shloka
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, uploadAudio.single('audio'), async (req, res) => {
   try {
     const {
       chapterNumber,
@@ -159,9 +180,16 @@ router.post('/', authMiddleware, async (req, res) => {
       explanation: explanation || '',
       tags: tags || '',
       status: status || 'draft',
-      isActive: isActive !== undefined ? isActive : true,
+      isActive: isActive === true || isActive === 'true',
       clientId: getClientId(req.user, req)
     };
+
+    if (req.file) {
+      const ext = req.file.originalname.split('.').pop();
+      const audioKey = `geeta-shloka/audio/${Date.now()}.${ext}`;
+      await uploadBuffer(req.file.buffer, audioKey, req.file.mimetype);
+      shlokaData.audioUrl = audioKey;
+    }
     
     const shloka = new Shloka(shlokaData);
     await shloka.save();
@@ -169,7 +197,7 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Shloka created successfully',
-      data: shloka
+      data: await withSignedUrl(shloka)
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -188,7 +216,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // PUT update shloka
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, uploadAudio.single('audio'), async (req, res) => {
   try {
     const {
       chapterNumber,
@@ -223,23 +251,32 @@ router.put('/:id', authMiddleware, async (req, res) => {
       }
     }
 
+    const updateData = {
+      chapterNumber: parseInt(chapterNumber),
+      chapterName,
+      section,
+      shlokaNumber: shlokaNumber.toString(),
+      shlokaIndex,
+      sanskritShloka,
+      hindiMeaning,
+      englishMeaning,
+      sanskritTransliteration: sanskritTransliteration || '',
+      explanation: explanation || '',
+      tags: tags || '',
+      status: status || 'draft',
+      isActive: isActive === true || isActive === 'true'
+    };
+
+    if (req.file) {
+      const ext = req.file.originalname.split('.').pop();
+      const audioKey = `geeta-shloka/audio/${Date.now()}.${ext}`;
+      await uploadBuffer(req.file.buffer, audioKey, req.file.mimetype);
+      updateData.audioUrl = audioKey;
+    }
+
     const shloka = await Shloka.findOneAndUpdate(
       { _id: req.params.id, clientId: getClientId(req.user, req) },
-      {
-        chapterNumber: parseInt(chapterNumber),
-        chapterName,
-        section,
-        shlokaNumber: shlokaNumber.toString(),
-        shlokaIndex,
-        sanskritShloka,
-        hindiMeaning,
-        englishMeaning,
-        sanskritTransliteration: sanskritTransliteration || '',
-        explanation: explanation || '',
-        tags: tags || '',
-        status: status || 'draft',
-        isActive: isActive !== undefined ? isActive : true
-      },
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -253,9 +290,10 @@ router.put('/:id', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       message: 'Shloka updated successfully',
-      data: shloka
+      data: await withSignedUrl(shloka)
     });
   } catch (error) {
+    console.error('PUT /shlokas/:id error:', error.message, error.stack);
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -380,10 +418,12 @@ router.get('/chapter/:chapterNumber', authMiddleware, async (req, res) => {
     const shlokas = await Shloka.find(filter)
       .sort({ shlokaIndex: 1 });
 
+    const shlokaData = await Promise.all(shlokas.map(withSignedUrl));
+
     res.json({
       success: true,
-      data: shlokas,
-      count: shlokas.length
+      data: shlokaData,
+      count: shlokaData.length
     });
   } catch (error) {
     res.status(500).json({

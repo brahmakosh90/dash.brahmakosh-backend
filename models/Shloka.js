@@ -51,6 +51,10 @@ const shlokaSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  audioUrl: {
+    type: String,
+    default: ''
+  },
   tags: {
     type: String,
     trim: true,
