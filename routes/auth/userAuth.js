@@ -299,12 +299,12 @@ router.post('/login', async (req, res) => {
 // User Registration
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, profile } = req.body;
+    const { email, password, fullName, dob, placeOfBirth, profession } = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || !fullName) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Email and password are required' 
+        message: 'Full name, email and password are required' 
       });
     }
 
@@ -319,9 +319,14 @@ router.post('/register', async (req, res) => {
     const user = new User({
       email,
       password,
-      profile: profile || {},
-      credits: 1000, // signup bonus
-      loginApproved: false // Requires super admin approval
+      profile: {
+        name: fullName,
+        dob: dob ? new Date(dob) : undefined,
+        placeOfBirth: placeOfBirth || '',
+        profession: profession || ''
+      },
+      credits: 1000,
+      loginApproved: false
     });
 
     await user.save();
@@ -329,15 +334,10 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'User registered successfully. Please wait for super admin approval to login.',
-      data: {
-        user: user.toObject()
-      }
+      data: { user: user.toObject() }
     });
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: error.message 
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

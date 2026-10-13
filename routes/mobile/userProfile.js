@@ -99,6 +99,15 @@ const upload = multer({
   },
 });
 
+// Normalize mobile to +91XXXXXXXXXX format
+const normalizeMobile = (mobile) => {
+  const digits = String(mobile).replace(/\D/g, '');
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+  if (String(mobile).startsWith('+')) return `+${digits}`;
+  return `+${digits}`;
+};
+
 // Helper function to validate and get client
 async function validateClientId(clientCode) {
   if (!clientCode) {
@@ -497,159 +506,114 @@ router.post('/login/firebase', async (req, res) => {
 // ============================================
 
 /**
- * STEP 1: Email OTP Verification
+ * STEP 1: Mobile OTP Verification
  * POST /api/mobile/user/register/step1
- * Body: { email, password, clientId }
+ * Body: { mobile, otpMethod, clientId }
  */
 router.post('/register/step1', async (req, res) => {
   try {
-    const { email, password, clientId: clientCode } = req.body;
+    const { mobile: rawMobile, otpMethod = 'whatsapp', clientId: clientCode } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email is required' 
-      });
+    if (!rawMobile) {
+      return res.status(400).json({ success: false, message: 'Mobile number is required' });
     }
 
-    // Validate client
+    const mobile = normalizeMobile(rawMobile);
     const client = await validateClientId(clientCode);
 
-    const { emailUsedByOtherAccountType } = await import('../../utils/accountValidation.js');
-    const crossEmailError = await emailUsedByOtherAccountType(email, 'user');
-    if (crossEmailError) {
-      return res.status(400).json({ success: false, message: crossEmailError });
+    // Check if mobile already fully registered
+    const existingUser = await User.findOne({ clientId: client._id, mobile, registrationStep: 3 });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Mobile number already registered. Please login.' });
     }
 
-    // Check if user already exists for this client
-    let user = await User.findOne({ 
-      clientId: client._id, 
-      email 
-    }).select('+emailOtp +emailOtpExpiry');
-    
-    if (user && user.registrationStep === 3) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'User already registered with this email for this client' 
-      });
-    }
-
-    // Generate new OTP
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry();
 
+    let user = await User.findOne({ clientId: client._id, mobile }).select('+mobileOtp +mobileOtpExpiry');
     if (user) {
-      user.emailOtp = otp;
-      user.emailOtpExpiry = otpExpiry;
-      if (password) {
-        user.password = password;
-      }
-      if (!user.emailVerified) {
-        user.emailVerified = false;
-      }
+      user.mobileOtp = otp;
+      user.mobileOtpExpiry = otpExpiry;
+      user.mobileOtpMethod = otpMethod;
       await user.save();
     } else {
       user = new User({
-        email,
-        password: password || 'temp_password_' + Date.now(),
-        emailOtp: otp,
-        emailOtpExpiry: otpExpiry,
+        mobile,
+        email: `mobile_${mobile.replace(/\+/g, '')}${Date.now()}@temp.com`,
+        password: 'temp_password_' + Date.now(),
+        mobileOtp: otp,
+        mobileOtpExpiry: otpExpiry,
+        mobileOtpMethod: otpMethod,
         registrationStep: 0,
-        emailVerified: false,
+        mobileVerified: false,
         clientId: client._id,
         clientCode: client.clientId
       });
       await user.save();
     }
 
-    // Send OTP to email
-    const emailResult = await sendEmailOTP(email, otp);
-    if (!emailResult.success) {
-      console.warn('Email OTP sending had issues, but continuing:', emailResult.message);
+    const otpResult = await sendMobileOTP(mobile, otp, otpMethod);
+    if (!otpResult.success) {
+      console.warn('Mobile OTP sending had issues:', otpResult.message);
     }
 
     res.json({
       success: true,
-      message: 'OTP sent to your email. Please verify to continue.',
-      data: {
-        email: user.email,
-        registrationStep: 1,
-        clientId: client.clientId,
-        clientName: client.businessName
-      }
+      message: `OTP sent to ${mobile} via ${otpMethod.toUpperCase()}`,
+      data: { mobile, otpMethod, clientId: client.clientId, clientName: client.businessName }
     });
   } catch (error) {
     console.error('Step 1 registration error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Failed to initiate registration' 
-    });
+    res.status(500).json({ success: false, message: error.message || 'Failed to send OTP' });
   }
 });
 
 /**
- * STEP 1 VERIFY: Verify Email OTP
+ * STEP 1 VERIFY: Verify Mobile OTP
  * POST /api/mobile/user/register/step1/verify
- * Body: { email, otp, clientId }
+ * Body: { mobile, otp, clientId }
  */
 router.post('/register/step1/verify', async (req, res) => {
   try {
-    const { email, otp, clientId: clientCode } = req.body;
+    const { mobile: rawMobile, otp, clientId: clientCode } = req.body;
 
-    if (!email || !otp) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email and OTP are required' 
-      });
+    if (!rawMobile || !otp) {
+      return res.status(400).json({ success: false, message: 'Mobile and OTP are required' });
     }
 
-    // Validate client
+    const mobile = normalizeMobile(rawMobile);
     const client = await validateClientId(clientCode);
 
-    const user = await User.findOne({ 
-      clientId: client._id, 
-      email 
-    }).select('+emailOtp +emailOtpExpiry');
-    
+    const user = await User.findOne({ clientId: client._id, mobile }).select('+mobileOtp +mobileOtpExpiry');
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found. Please start registration again.' 
-      });
+      return res.status(404).json({ success: false, message: 'User not found. Please send OTP first.' });
     }
 
-    // Validate OTP
-    const validation = validateOTP(user.emailOtp, otp, user.emailOtpExpiry);
+    const validation = validateOTP(user.mobileOtp, otp, user.mobileOtpExpiry);
     if (!validation.valid) {
-      return res.status(400).json({ 
-        success: false, 
-        message: validation.message 
-      });
+      return res.status(400).json({ success: false, message: validation.message });
     }
 
-    // Mark email as verified
-    user.emailVerified = true;
-    user.emailOtp = undefined;
-    user.emailOtpExpiry = undefined;
+    user.mobileVerified = true;
+    user.registrationStep = 1;
+    user.mobileOtp = undefined;
+    user.mobileOtpExpiry = undefined;
     await user.save();
 
     res.json({
       success: true,
-      message: 'Email verified successfully',
+      message: 'Mobile verified successfully',
       data: {
-        email: user.email,
-        emailVerified: true,
-        mobileVerified: user.mobileVerified || false,
-        profileCompleted: user.registrationStep === 3,
+        mobile: user.mobile,
+        mobileVerified: true,
+        registrationStep: 1,
+        nextStep: 'complete_profile',
         clientId: client.clientId
       }
     });
   } catch (error) {
-    console.error('Email OTP verification error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Failed to verify email OTP' 
-    });
+    console.error('Step 1 verify error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to verify OTP' });
   }
 });
 
@@ -881,7 +845,9 @@ router.post('/register/step2/verify', async (req, res) => {
 router.post('/register/step3', async (req, res) => {
   try {
     const { 
-      email, 
+      mobile,
+      email,
+      password,
       clientId: clientCode,
       name, 
       dob, 
@@ -889,43 +855,38 @@ router.post('/register/step3', async (req, res) => {
       placeOfBirth,
       latitude,
       longitude,
-      gowthra
+      gowthra,
+      profession
     } = req.body;
 
-    const { mobile } = req.body;
-    
-    if (!email && !mobile) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email or mobile number is required' 
-      });
+    if (!mobile) {
+      return res.status(400).json({ success: false, message: 'Mobile number is required' });
     }
 
     // Validate client
     const client = await validateClientId(clientCode);
 
-    // Find user by email or mobile for this client
-    let user = null;
-    if (email) {
-      user = await User.findOne({ clientId: client._id, email });
-    }
-    if (!user && mobile) {
-      user = await User.findOne({ clientId: client._id, mobile });
-    }
+    const normalizedMobile = normalizeMobile(mobile);
+
+    // Find user by mobile
+    let user = await User.findOne({ clientId: client._id, mobile: normalizedMobile });
     
     // If user doesn't exist, create one
     if (!user) {
       user = new User({
-        email: email || `profile_${Date.now()}@temp.com`,
-        mobile: mobile || null,
-        password: 'temp_password_' + Date.now(),
+        mobile: normalizedMobile,
+        email: email || `mobile_${normalizedMobile.replace(/\+/g, '')}@temp.com`,
+        password: password || 'temp_password_' + Date.now(),
         registrationStep: 0,
-        emailVerified: false,
-        mobileVerified: false,
+        mobileVerified: true,
         clientId: client._id,
         clientCode: client.clientId
       });
     }
+
+    // Update email and password if provided
+    if (email) user.email = email;
+    if (password) user.password = password;
 
     // Update profile information
     if (!user.profile) {
@@ -939,6 +900,7 @@ router.post('/register/step3', async (req, res) => {
     if (latitude !== undefined) user.profile.latitude = parseFloat(latitude);
     if (longitude !== undefined) user.profile.longitude = parseFloat(longitude);
     if (gowthra) user.profile.gowthra = gowthra;
+    if (profession) user.profile.profession = profession;
 
     // Mark registration as complete
     user.registrationStep = 3;
@@ -1197,7 +1159,104 @@ router.post('/check-email', async (req, res) => {
 // ============================================
 
 /**
- * User Login (Mobile)
+ * Send OTP to phone for login
+ * POST /api/mobile/user/login/phone
+ * Body: { mobile, otpMethod, clientId }
+ */
+router.post('/login/phone', async (req, res) => {
+  try {
+    const { mobile, otpMethod = 'whatsapp', clientId: clientCode } = req.body;
+
+    if (!mobile) {
+      return res.status(400).json({ success: false, message: 'Mobile number is required' });
+    }
+
+    const client = await validateClientId(clientCode);
+
+    const user = await User.findOne({ mobile, clientId: client._id, mobileVerified: true })
+      .select('+mobileOtp +mobileOtpExpiry');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No account found with this mobile number' });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({ success: false, message: 'Account is inactive. Please contact administrator.' });
+    }
+
+    if (user.registrationStep < 3) {
+      return res.status(400).json({ success: false, message: 'Registration incomplete. Please complete all steps.' });
+    }
+
+    const otp = generateOTP();
+    const otpExpiry = getOTPExpiry();
+    user.mobileOtp = otp;
+    user.mobileOtpExpiry = otpExpiry;
+    await user.save();
+
+    await sendMobileOTP(mobile, otp, otpMethod);
+
+    res.json({
+      success: true,
+      message: `OTP sent to ${mobile}`,
+      data: { mobile }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to send OTP' });
+  }
+});
+
+/**
+ * Verify OTP and login
+ * POST /api/mobile/user/login/phone/verify
+ * Body: { mobile, otp, clientId }
+ */
+router.post('/login/phone/verify', async (req, res) => {
+  try {
+    const { mobile, otp, clientId: clientCode } = req.body;
+
+    if (!mobile || !otp) {
+      return res.status(400).json({ success: false, message: 'Mobile and OTP are required' });
+    }
+
+    const client = await validateClientId(clientCode);
+
+    const user = await User.findOne({ mobile, clientId: client._id })
+      .select('+mobileOtp +mobileOtpExpiry')
+      .populate('clientId', 'clientId businessName');
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const validation = validateOTP(user.mobileOtp, otp, user.mobileOtpExpiry);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
+    user.mobileOtp = undefined;
+    user.mobileOtpExpiry = undefined;
+    await user.save();
+
+    const token = generateToken(user._id, 'user', user.clientId._id || user.clientId);
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        user: { ...user.toObject(), role: 'user' },
+        token,
+        clientId: user.clientId?.clientId || null,
+        clientName: user.clientId?.businessName || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || 'Login failed' });
+  }
+});
+
+/**
+ * User Login (Mobile) - Email + Password
  * POST /api/mobile/user/login
  * Body: { email, password, clientId (optional) }
  */

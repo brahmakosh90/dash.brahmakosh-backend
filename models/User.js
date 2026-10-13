@@ -29,6 +29,7 @@ const userSchema = new mongoose.Schema({
     dob: Date,
     timeOfBirth: String,
     placeOfBirth: String,
+    profession: String,
     latitude: {
       type: Number,
       min: -90,
