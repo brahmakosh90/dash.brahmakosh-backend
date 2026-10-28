@@ -14,11 +14,12 @@ const fail = (res, status, message) => res.status(status).json({ success: false,
 // Partner application. Accounts stay `pending` until an admin approves them.
 router.post('/register', limiter, async (req, res) => {
   try {
-    const { name, org, email, password, phone, country, audience, bio } = req.body || {};
+    const { name, org, email, password, phone, country, state, city, bio } = req.body || {};
     if (!name?.trim() || !email || !/^\S+@\S+\.\S+$/.test(email)) return fail(res, 400, 'Name and a valid email are required.');
     if (!password || password.length < 8) return fail(res, 400, 'Password must be at least 8 characters.');
+    if (!country?.trim() || !city?.trim()) return fail(res, 400, 'Country and city are required.');
     if (await ReferralPartner.exists({ email: email.toLowerCase() })) return fail(res, 409, 'An application with this email already exists.');
-    const p = await ReferralPartner.create({ name, org, email, password, phone, country, audience, bio: (bio || '').slice(0, 600) });
+    const p = await ReferralPartner.create({ name, org, email, password, phone, country: country.trim().slice(0, 80), state: String(state || '').trim().slice(0, 80), city: city.trim().slice(0, 80), bio: (bio || '').slice(0, 600) });
     res.status(201).json({ success: true, message: 'Application submitted. We will review it shortly.', data: { token: signPartnerToken(p._id), partner: serializePartner(p) } });
   } catch (e) { fail(res, 500, e.message); }
 });

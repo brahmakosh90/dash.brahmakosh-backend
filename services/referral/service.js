@@ -16,7 +16,7 @@ const RESERVING = ['pending', 'approved', 'processing'];
 export const initials = (name = '') => name.split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
 export const serializePartner = (p) => ({
-  id: String(p._id), name: p.name, org: p.org, email: p.email, phone: p.phone, country: p.country, audience: p.audience, bio: p.bio,
+  id: String(p._id), name: p.name, org: p.org, email: p.email, phone: p.phone, country: p.country, state: p.state || '', city: p.city || '', audience: p.audience, bio: p.bio,
   status: p.status, reviewNote: p.reviewNote || '', tier: p.tier, code: p.code || null, link: p.code ? `${LINK_BASE}/${p.code}` : null, joinedAt: p.joinedAt ? dayStr(0, p.joinedAt) : null,
   appliedAt: dayStr(0, p.createdAt), initials: initials(p.name),
 });

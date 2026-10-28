@@ -36,9 +36,9 @@ router.use(partnerAuth, requireApproved);
 
 router.patch('/profile', async (req, res) => {
   try {
-    const { name, org, phone, country, audience, bio } = req.body || {};
+    const { name, org, phone, country, state, city, bio } = req.body || {};
     if (name !== undefined && String(name).trim().length < 2) return fail(res, 400, 'Name is required.');
-    Object.assign(req.partner, Object.fromEntries(Object.entries({ name, org, phone, country, audience, bio: bio?.slice(0, 600) }).filter(([, v]) => v !== undefined)));
+    Object.assign(req.partner, Object.fromEntries(Object.entries({ name, org, phone, country: country?.slice(0, 80), state: state?.slice(0, 80), city: city?.slice(0, 80), bio: bio?.slice(0, 600) }).filter(([, v]) => v !== undefined)));
     await req.partner.save();
     res.json({ success: true, data: { partner: serializePartner(req.partner) } });
   } catch (e) { fail(res, 500, e.message); }

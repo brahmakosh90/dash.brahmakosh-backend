@@ -16,6 +16,8 @@ const schema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 8, select: false },
   phone: { type: String, default: '' },
   country: { type: String, default: '' },
+  state: { type: String, default: '', maxlength: 80 },
+  city: { type: String, default: '', maxlength: 80 },
   audience: { type: String, default: '' },
   bio: { type: String, default: '', maxlength: 600 },
   status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'pending', index: true },

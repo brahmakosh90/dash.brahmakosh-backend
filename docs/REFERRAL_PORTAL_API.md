@@ -48,7 +48,7 @@ Common status codes: `400` validation · `401` missing/invalid token · `403` no
 ## 2. Authentication
 
 ### `POST /auth/register` — partner application
-Body: `name` (required), `email` (required), `password` (≥ 8, required), `org`, `phone`, `country`, `audience`, `bio` (≤ 600).
+Body: `name`, `email`, `password` (≥ 8), `country` and `city` are required; optional `org`, `phone`, `state`, `bio` (≤ 600).
 `201` → `{ token, partner }`. The partner is `pending` until approved. `409` if the email exists.
 
 ### `POST /auth/login` — partner sign-in
@@ -65,7 +65,7 @@ Accepts (a) referral team accounts created in the portal, and (b) existing platf
 
 **Partner object**
 ```json
-{ "id": "…", "name": "Aarav Mehta", "org": "Mindful Mornings", "email": "…", "phone": "…", "country": "India", "audience": "…", "bio": "…",
+{ "id": "…", "name": "Aarav Mehta", "org": "Mindful Mornings", "email": "…", "phone": "…", "country": "India", "state": "Madhya Pradesh", "city": "Indore", "bio": "…",
   "status": "pending|approved|rejected|suspended", "reviewNote": "reason given by staff on reject/suspend", "tier": "Bronze", "code": "BRAHM-AARAV24", "link": "https://brahmakosh.com/r/BRAHM-AARAV24",
   "joinedAt": "2026-01-10", "appliedAt": "2026-01-02", "initials": "AM" }
 ```
@@ -120,7 +120,7 @@ Pending/rejected/suspended partners receive `403` with `code: partner_pending | 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/partner/profile` | Own profile and approval status |
-| PATCH | `/partner/profile` | Update `name, org, phone, country, audience, bio` |
+| PATCH | `/partner/profile` | Update `name, org, phone, country, state, city, bio` |
 | GET | `/partner/bootstrap` | Everything the dashboard needs (below) |
 | GET | `/partner/leaderboard?period=7\|30\|all` | Spiritual-impact ranking |
 | POST | `/partner/withdrawals` | Request a withdrawal |
