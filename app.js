@@ -76,6 +76,7 @@ import stripeWebhookRoutes         from './routes/stripeWebhook.js';
 import adminPaymentRoutes          from './routes/adminPayments.js';
 import clientPaymentRoutes         from './routes/clientPayments.js';
 import storeProxyRoutes            from './routes/storeProxy.js';
+import referralRoutes              from './routes/referral/index.js';
 
 // ─── Voice Config & TTS Routes ────────────────────────────────────────────────
 import voiceConfigRoutes           from './routes/voiceConfig.js';
@@ -149,6 +150,9 @@ mongoose.connect(MONGODB_URI)
 // ─────────────────────────────────────────────────────────────────────────────
 // REST API ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Referral Partner Portal (affiliate programme)
+app.use('/api/referral', referralRoutes);
 
 // Partner
 app.use('/api/partners', partnerRoutes);
