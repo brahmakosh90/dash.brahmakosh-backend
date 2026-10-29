@@ -9,7 +9,6 @@ const creditSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     // Positive amounts = credits added. (Future: negative for deductions.)
     amount: {

@@ -694,7 +694,8 @@ export const sendMobileOTP = async (mobile, otp, method = 'twilio') => {
       // Fallback to Twilio WhatsApp
       if (process.env.TWILIO_ACCOUNT_SID && 
           process.env.TWILIO_AUTH_TOKEN && 
-          process.env.TWILIO_WHATSAPP_NUMBER) {
+          process.env.TWILIO_WHATSAPP_NUMBER &&
+          process.env.TWILIO_WHATSAPP_ENABLED === 'true') {
         try {
           const message = await sendWhatsAppViaTwilio(normalizedMobile, otp);
           

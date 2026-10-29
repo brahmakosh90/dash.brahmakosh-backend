@@ -4,8 +4,8 @@ const voiceCallLogSchema = new mongoose.Schema(
   {
     conversationId: { type: String, required: true, index: true, unique: true },
 
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', required: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', required: true },
 
     status: {
       type: String,
