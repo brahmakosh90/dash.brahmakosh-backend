@@ -1155,6 +1155,150 @@ router.post('/check-email', async (req, res) => {
 });
 
 // ============================================
+// UNIFIED SEND OTP (Login or Register)
+// ============================================
+
+/**
+ * Send OTP - works for both new and existing users
+ * POST /api/mobile/user/send-otp
+ * Body: { mobile, otpMethod, clientId }
+ */
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { mobile: rawMobile, otpMethod = 'whatsapp', clientId: clientCode } = req.body;
+
+    if (!rawMobile) {
+      return res.status(400).json({ success: false, message: 'Mobile number is required' });
+    }
+
+    const mobile = normalizeMobile(rawMobile);
+    const client = await validateClientId(clientCode);
+
+    const otp = generateOTP();
+    const otpExpiry = getOTPExpiry();
+
+    let user = await User.findOne({ clientId: client._id, mobile }).select('+mobileOtp +mobileOtpExpiry');
+    if (user) {
+      user.mobileOtp = otp;
+      user.mobileOtpExpiry = otpExpiry;
+      user.mobileOtpMethod = otpMethod;
+      await user.save();
+    } else {
+      user = new User({
+        mobile,
+        email: `mobile_${mobile.replace(/\+/g, '')}${Date.now()}@temp.com`,
+        password: 'temp_password_' + Date.now(),
+        mobileOtp: otp,
+        mobileOtpExpiry: otpExpiry,
+        mobileOtpMethod: otpMethod,
+        registrationStep: 0,
+        mobileVerified: false,
+        clientId: client._id,
+        clientCode: client.clientId
+      });
+      await user.save();
+    }
+
+    const otpResult = await sendMobileOTP(mobile, otp, otpMethod);
+    if (!otpResult.success) {
+      console.warn('OTP sending had issues:', otpResult.message);
+    }
+
+    res.json({
+      success: true,
+      message: `OTP sent successfully to ${mobile}`
+    });
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to send OTP' });
+  }
+});
+
+/**
+ * Verify OTP - Login existing user or create new user (upsert)
+ * POST /api/mobile/user/verify-otp
+ * Body: { mobile, otp, clientId }
+ */
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { mobile: rawMobile, otp, clientId: clientCode } = req.body;
+
+    if (!rawMobile || !otp) {
+      return res.status(400).json({ success: false, message: 'Mobile and OTP are required' });
+    }
+
+    const mobile = normalizeMobile(rawMobile);
+    const client = await validateClientId(clientCode);
+
+    const user = await User.findOne({ clientId: client._id, mobile }).select('+mobileOtp +mobileOtpExpiry');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'OTP not sent. Please request OTP first.' });
+    }
+
+    const validation = validateOTP(user.mobileOtp, otp, user.mobileOtpExpiry);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.message });
+    }
+
+    user.mobileOtp = undefined;
+    user.mobileOtpExpiry = undefined;
+    user.mobileVerified = true;
+
+    const isNewUser = user.registrationStep < 3;
+
+    if (isNewUser) {
+      // New user - set defaults and mark active
+      if (!user.profile) user.profile = {};
+      if (!user.profile.name) user.profile.name = 'Devotee';
+      user.registrationStep = 3;
+      user.loginApproved = true;
+      user.isActive = true;
+      user.isProfileComplete = false;
+    }
+
+    await user.save();
+
+    const token = generateToken(user._id, 'user', user.clientId);
+
+    if (isNewUser) {
+      return res.json({
+        success: true,
+        message: 'Account created and logged in successfully',
+        token,
+        data: {
+          isNewUser: true,
+          user: {
+            _id: user._id,
+            mobile: user.mobile,
+            name: user.profile.name,
+            isProfileComplete: false
+          }
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      data: {
+        isNewUser: false,
+        user: {
+          _id: user._id,
+          mobile: user.mobile,
+          name: user.profile?.name || '',
+          dob: user.profile?.dob,
+          isProfileComplete: true
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ success: false, message: error.message || 'OTP verification failed' });
+  }
+});
+
+// ============================================
 // LOGIN
 // ============================================
 
