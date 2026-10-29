@@ -179,7 +179,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
 
         const dgConn = deepgramClient.listen.live({
           model:            'nova-2-general',
-          language:         voiceConfig?.language || 'en-IN',
+          language:         voiceConfig?.language || 'hi',
           encoding:         'linear16',
           sample_rate:      16000,
           channels:         1,
