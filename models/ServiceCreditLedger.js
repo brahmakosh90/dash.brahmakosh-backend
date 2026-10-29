@@ -7,8 +7,8 @@ import mongoose from 'mongoose';
  */
 const serviceCreditLedgerSchema = new mongoose.Schema(
   {
-    conversationId: { type: String, required: true, index: true },
-    serviceType: { type: String, enum: ['chat', 'voice', 'video'], required: true, index: true },
+    conversationId: { type: String, required: true },
+    serviceType: { type: String, enum: ['chat', 'voice', 'video'], required: true },
 
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', required: true },
