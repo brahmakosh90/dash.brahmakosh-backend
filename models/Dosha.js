@@ -33,7 +33,7 @@ const doshaSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-doshaSchema.index({ userId: 1 });
+// userId index is already created by unique:true on the field definition.
 
 const Dosha = mongoose.model('Dosha', doshaSchema);
 

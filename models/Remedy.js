@@ -32,7 +32,7 @@ const remedySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-remedySchema.index({ userId: 1 });
+// userId index is already created by unique:true on the field definition.
 
 const Remedy = mongoose.model('Remedy', remedySchema);
 
