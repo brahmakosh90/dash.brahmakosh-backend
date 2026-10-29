@@ -1177,27 +1177,26 @@ router.post('/send-otp', async (req, res) => {
     const otp = generateOTP();
     const otpExpiry = getOTPExpiry();
 
-    let user = await User.findOne({ clientId: client._id, mobile }).select('+mobileOtp +mobileOtpExpiry');
-    if (user) {
-      user.mobileOtp = otp;
-      user.mobileOtpExpiry = otpExpiry;
-      user.mobileOtpMethod = otpMethod;
-      await user.save();
-    } else {
-      user = new User({
-        mobile,
-        email: `mobile_${mobile.replace(/\+/g, '')}${Date.now()}@temp.com`,
-        password: 'temp_password_' + Date.now(),
-        mobileOtp: otp,
-        mobileOtpExpiry: otpExpiry,
-        mobileOtpMethod: otpMethod,
-        registrationStep: 0,
-        mobileVerified: false,
-        clientId: client._id,
-        clientCode: client.clientId
-      });
-      await user.save();
-    }
+    // Use findOneAndUpdate to avoid race condition / duplicate records
+    await User.findOneAndUpdate(
+      { clientId: client._id, mobile },
+      {
+        $set: {
+          mobileOtp: otp,
+          mobileOtpExpiry: otpExpiry,
+          mobileOtpMethod: otpMethod
+        },
+        $setOnInsert: {
+          email: `mobile_${mobile.replace(/\+/g, '')}@temp.com`,
+          password: 'temp_password_' + Date.now(),
+          registrationStep: 0,
+          mobileVerified: false,
+          clientId: client._id,
+          clientCode: client.clientId
+        }
+      },
+      { upsert: true, new: true }
+    );
 
     const otpResult = await sendMobileOTP(mobile, otp, otpMethod);
     if (!otpResult.success) {
