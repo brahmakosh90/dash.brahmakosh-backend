@@ -47,15 +47,6 @@ const DEFAULT_VOICES = [
 
   // ─── Female Voices (Rashmi) ───────────────────────────────────────────────
   {
-    name: 'rashmi1',
-    gender: 'female',
-    voiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel - calm female voice
-    elevenlabsVoiceName: 'Rachel',
-    displayName: 'Rashmi 1 (Rachel)',
-    description: 'Calm, composed female voice perfect for meditation guidance.',
-    prompt: 'Give the answer within two lines.',
-  },
-  {
     name: 'rashmi2',
     gender: 'female',
     voiceId: 'AZnzlk1XvdvUeBnXmlld', // Domi - strong female voice
