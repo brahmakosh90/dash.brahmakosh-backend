@@ -3,6 +3,7 @@ import multer from 'multer';
 import User from '../../models/User.js';
 import { getPresignedUrl, uploadBuffer } from '../../utils/storage.js';
 import { v4 as uuidv4 } from 'uuid';
+import { recordRegistration, resolveCode } from '../../services/referral/attribution.js';
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ const upload = multer({
  */
 router.post('/register-with-image', upload.single('image'), async (req, res) => {
   try {
-    const { email, password, name, dob, timeOfBirth, placeOfBirth, gowthra, profession } = req.body;
+    const { email, password, name, dob, timeOfBirth, placeOfBirth, gowthra, profession, referralCode } = req.body;
     const imageFile = req.file;
 
     if (!email || !password) {
@@ -83,7 +84,20 @@ router.post('/register-with-image', upload.single('image'), async (req, res) => 
       loginApproved: false, // Requires super admin approval
     });
 
+    // Attach referral if code provided
+    if (referralCode) {
+      try {
+        const { campaign, partner } = await resolveCode(referralCode);
+        user.referredBy = { partnerId: partner._id, campaignId: campaign._id, code: referralCode.toUpperCase() };
+      } catch (_) { /* invalid code — ignore, don't block registration */ }
+    }
+
     await user.save();
+
+    // Record referral attribution after save
+    if (referralCode && user.referredBy?.partnerId) {
+      try { await recordRegistration(user, { referralCode }); } catch (_) { /* non-blocking */ }
+    }
 
     // Get presigned URL for the image if uploaded
     let profileImageUrl = null;

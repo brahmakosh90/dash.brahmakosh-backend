@@ -140,6 +140,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: 'Asia/Kolkata' // Default to IST
   },
+  referredBy: {
+    partnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'ReferralPartner' },
+    campaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'ReferralCampaign' },
+    code: { type: String },
+  },
   // Firebase Cloud Messaging device tokens (push notifications)
   fcmTokens: [
     {
