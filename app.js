@@ -98,6 +98,13 @@ startClientNotificationScheduler();
 const app    = express();
 const server = http.createServer(app);
 
+// ─── Reverse proxy ───────────────────────────────────────────────────────────
+// Production runs behind nginx (X-Forwarded-For is set). Without this, req.ip is the
+// proxy's address, so express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and
+// every client shares one rate-limit bucket. Set TRUST_PROXY to the number of proxy hops
+// (e.g. 2 for Cloudflare + nginx); use 0 to disable (local dev without a proxy).
+app.set('trust proxy', Number.parseInt(process.env.TRUST_PROXY ?? '1', 10) || 0);
+
 // ─── Compression ─────────────────────────────────────────────────────────────
 app.use(compression());
 
