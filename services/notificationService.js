@@ -27,7 +27,7 @@ const sendEmail = async (to, subject, htmlContent) => {
 
 // Twilio SMS Service
 const sendSMS = async (to, message) => {
-  if (!process.env.TWILIO_WHATSAPP_ENABLED || !process.env.TWILIO_WHATSAPP_ACCOUNT_SID) return;
+  if (process.env.TWILIO_WHATSAPP_ENABLED !== 'true' || !process.env.TWILIO_WHATSAPP_ACCOUNT_SID) return;
   
   try {
     const auth = Buffer.from(`${process.env.TWILIO_WHATSAPP_ACCOUNT_SID}:${process.env.TWILIO_WHATSAPP_AUTH_TOKEN}`).toString('base64');
@@ -48,7 +48,7 @@ const sendSMS = async (to, message) => {
 
 // Twilio WhatsApp Service
 const sendWhatsApp = async (to, message) => {
-  if (!process.env.TWILIO_WHATSAPP_ENABLED || !process.env.TWILIO_WHATSAPP_FROM) return;
+  if (process.env.TWILIO_WHATSAPP_ENABLED !== 'true' || !process.env.TWILIO_WHATSAPP_FROM) return;
   
   try {
     const auth = Buffer.from(`${process.env.TWILIO_WHATSAPP_ACCOUNT_SID}:${process.env.TWILIO_WHATSAPP_AUTH_TOKEN}`).toString('base64');
