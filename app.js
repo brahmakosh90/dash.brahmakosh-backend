@@ -281,6 +281,18 @@ app.get('/api/health', (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
+  // Upload errors from multer are client mistakes, not server faults
+  if (err?.name === 'MulterError') {
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    return res.status(tooLarge ? 413 : 400).json({
+      success: false,
+      message: tooLarge ? 'File is too large. Maximum allowed size is 5 MB.' : err.message,
+    });
+  }
+  if (err?.message === 'Only image files are allowed') {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+
   console.error(err.stack);
   res.status(500).json({
     success: false,
