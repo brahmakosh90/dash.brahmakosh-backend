@@ -146,6 +146,16 @@ const DEFAULT_VOICES = [
     modelId: 'eleven_multilingual_v2',
     prompt: 'Give the answer within two lines.',
   },
+  {
+    name: 'rasmi1',
+    gender: 'female',
+    voiceId: 'ydnQbIPvdUZLvjGe0dap',
+    elevenlabsVoiceName: 'Rasmi',
+    displayName: 'Rasmi AI Voice',
+    description: 'Custom voice for Rasmi AI.',
+    modelId: 'eleven_multilingual_v2',
+    prompt: 'Give the answer within two lines.',
+  },
 ];
 
 export const seedVoiceConfigs = async () => {

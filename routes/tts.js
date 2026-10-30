@@ -42,7 +42,7 @@ router.post('/synthesize', authenticate, authorize('client', 'admin', 'super_adm
 
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
-    const response = await fetch(url, {
+    const requestTTS = (targetUrl) => fetch(targetUrl, {
       method:  'POST',
       headers: {
         Accept:         'audio/mpeg',
@@ -55,6 +55,14 @@ router.post('/synthesize', authenticate, authorize('client', 'admin', 'super_adm
         voice_settings: settings,
       }),
     });
+
+    let response = await requestTTS(url);
+
+    // Voice missing on this environment's ElevenLabs account — use the default voice
+    if (response.status === 404 && voiceId !== FALLBACK_VOICE_ID) {
+      console.error(`[TTS] ElevenLabs voice "${voiceId}" (${voice?.name}) not found for this API key — falling back to default voice`);
+      response = await requestTTS(`https://api.elevenlabs.io/v1/text-to-speech/${FALLBACK_VOICE_ID}`);
+    }
 
     if (!response.ok) {
       const errText = await response.text();

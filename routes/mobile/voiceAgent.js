@@ -321,12 +321,23 @@ export const handleVoiceAgentWebSocket = (wss) => {
         // Bug Fix: Add timeout to ElevenLabs fetch — prevents hanging forever on slow network
         const fetchTimeout = setTimeout(() => { try { abortCtrl.abort(); } catch (_) {} }, 30_000);
 
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+        const requestTTS = (id) => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${id}/stream`, {
           method:  'POST',
           headers: { Accept: 'audio/mpeg', 'Content-Type': 'application/json', 'xi-api-key': elevenLabsApiKey },
           body:    JSON.stringify({ text, model_id: modelId, voice_settings: settings }),
           signal:  abortCtrl.signal,
         });
+
+        let response = await requestTTS(voiceId);
+
+        // The configured voice may not exist on this environment's ElevenLabs account
+        // (e.g. a cloned/library voice that was never added to the production workspace).
+        // Fall back to the default voice instead of failing the whole call.
+        if (response.status === 404 && voiceId !== FALLBACK_VOICE_ID) {
+          const errText = await response.text().catch(() => '');
+          console.error(`[VoiceAgent] ⚠️ ElevenLabs voice "${voiceId}" (${voiceConfig?.name}) not found for this API key — falling back to default voice. ${errText}`);
+          response = await requestTTS(FALLBACK_VOICE_ID);
+        }
 
         clearTimeout(fetchTimeout);
 

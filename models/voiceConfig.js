@@ -29,7 +29,8 @@ const voiceConfigSchema = new mongoose.Schema(
         'krishna1', 'krishna2', 'krishna3',
         'rashmi1', 'rashmi2', 'rashmi3',
         'saavi1', 'kanika1', 'roohi1', 'kanika2',
-        'ranbir1', 'priyanka1', 'god1', 'raqib1'
+        'ranbir1', 'priyanka1', 'god1', 'raqib1',
+        'rasmi1'
       ],
       trim: true,
     },
