@@ -9,6 +9,10 @@ import User from '../../models/User.js';
 import Client from '../../models/Client.js';
 import { uploadBuffer } from '../../utils/storage.js';
 
+// Voice credit billing is switched off for now. Set VOICE_BILLING_ENABLED=true in .env to turn
+// back on both the per-turn credit check and the 10-second credit deduction.
+const VOICE_BILLING_ENABLED = process.env.VOICE_BILLING_ENABLED === 'true';
+
 const DEFAULT_AGENT_VOICE_CCR = 20; // credits per 10 seconds
 const VOICE_BILLING_INTERVAL_MS = 10_000; // 10 seconds
 
@@ -444,14 +448,14 @@ export const handleVoiceAgentWebSocket = (wss) => {
 
       try {
         // Credit check before processing (deduction interval se hoti hai)
-        const userDoc = await User.findById(userId);
-        if (!userDoc || userDoc.credits <= 0) {
-          safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: userDoc?.credits ?? 0 });
-          cleanup();
-          return;
+        if (VOICE_BILLING_ENABLED) {
+          const userDoc = await User.findById(userId);
+          if (!userDoc || userDoc.credits <= 0) {
+            safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: userDoc?.credits ?? 0 });
+            cleanup();
+            return;
+          }
         }
-
-        const clientId = userDoc.clientId?._id || userDoc.clientId;
 
         chat.messages.push({ role: 'user', content: userMessage });
         await chat.save();
@@ -589,46 +593,48 @@ export const handleVoiceAgentWebSocket = (wss) => {
           safeSend({ type: 'deepgram_connected', message: 'Speech recognition active' });
           safeSend({ type: 'started', chatId: chat._id, voiceName: voiceConfig?.name || requestedVoice, message: 'Voice agent started' });
 
-          // ✅ Start 10-second billing interval
-          const userDocForBilling = await User.findById(userId).select('credits clientId').lean();
-          const billingClientId = userDocForBilling?.clientId?._id || userDocForBilling?.clientId;
-          const voiceCCR = await getAgentVoiceCCR(billingClientId);
+          // ✅ Start 10-second billing interval (disabled unless VOICE_BILLING_ENABLED=true)
+          if (VOICE_BILLING_ENABLED) {
+            const userDocForBilling = await User.findById(userId).select('credits clientId').lean();
+            const billingClientId = userDocForBilling?.clientId?._id || userDocForBilling?.clientId;
+            const voiceCCR = await getAgentVoiceCCR(billingClientId);
 
-          voiceBillingInterval = setInterval(async () => {
-            if (!isActive) {
-              clearInterval(voiceBillingInterval);
-              voiceBillingInterval = null;
-              return;
-            }
-            try {
-              const userDoc = await User.findById(userId);
-              if (!userDoc) return;
-
-              if (userDoc.credits <= 0) {
+            voiceBillingInterval = setInterval(async () => {
+              if (!isActive) {
                 clearInterval(voiceBillingInterval);
                 voiceBillingInterval = null;
-                safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: 0 });
-                cleanup();
                 return;
               }
+              try {
+                const userDoc = await User.findById(userId);
+                if (!userDoc) return;
 
-              const newBalance = Math.max(0, userDoc.credits - voiceCCR);
-              userDoc.credits = newBalance;
-              await userDoc.save();
+                if (userDoc.credits <= 0) {
+                  clearInterval(voiceBillingInterval);
+                  voiceBillingInterval = null;
+                  safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: 0 });
+                  cleanup();
+                  return;
+                }
 
-              safeSend({ type: 'credit:update', creditsDeducted: voiceCCR, remainingBalance: newBalance });
-              console.log(`[VoiceAgent] 💳 Billed ${voiceCCR} credits | balance: ${newBalance}`);
+                const newBalance = Math.max(0, userDoc.credits - voiceCCR);
+                userDoc.credits = newBalance;
+                await userDoc.save();
 
-              if (newBalance <= 0) {
-                clearInterval(voiceBillingInterval);
-                voiceBillingInterval = null;
-                safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: 0 });
-                cleanup();
+                safeSend({ type: 'credit:update', creditsDeducted: voiceCCR, remainingBalance: newBalance });
+                console.log(`[VoiceAgent] 💳 Billed ${voiceCCR} credits | balance: ${newBalance}`);
+
+                if (newBalance <= 0) {
+                  clearInterval(voiceBillingInterval);
+                  voiceBillingInterval = null;
+                  safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: 0 });
+                  cleanup();
+                }
+              } catch (err) {
+                console.error('[VoiceAgent] Billing interval error:', err.message);
               }
-            } catch (err) {
-              console.error('[VoiceAgent] Billing interval error:', err.message);
-            }
-          }, VOICE_BILLING_INTERVAL_MS);
+            }, VOICE_BILLING_INTERVAL_MS);
+          }
 
           // First message — only once per session, never on Deepgram reconnects
           if (agentFirstMessage && isActive && !firstMessageSent) {
