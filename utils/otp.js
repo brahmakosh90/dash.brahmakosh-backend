@@ -16,8 +16,19 @@ dotenv.config();
 // OTP GENERATION & VALIDATION
 // ============================================
 
-// Generate a random 6-digit OTP
-export const generateOTP = () => {
+// Fixed test credentials for Play Store / App Store review
+const TEST_MOBILE = '9999999999';
+const TEST_OTP = '123456';
+
+export const isTestMobile = (mobile) => {
+  if (!mobile) return false;
+  const digits = String(mobile).replace(/\D/g, '');
+  return digits.slice(-10) === TEST_MOBILE;
+};
+
+// Generate a random 6-digit OTP (fixed OTP for the test mobile number)
+export const generateOTP = (mobile) => {
+  if (isTestMobile(mobile)) return TEST_OTP;
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
@@ -632,6 +643,10 @@ const sendSMSViaTwilio = async (mobile, otp) => {
  * @returns {Promise<Object>} - Result object with success status
  */
 export const sendMobileOTP = async (mobile, otp, method = 'twilio') => {
+  if (isTestMobile(mobile)) {
+    return { success: true, message: 'Test number - OTP not sent', method };
+  }
+
   try {
     const otpMethod = method.toLowerCase();
     

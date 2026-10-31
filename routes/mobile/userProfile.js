@@ -1174,7 +1174,7 @@ router.post('/send-otp', async (req, res) => {
     const mobile = normalizeMobile(rawMobile);
     const client = await validateClientId(clientCode);
 
-    const otp = generateOTP();
+    const otp = generateOTP(mobile);
     const otpExpiry = getOTPExpiry();
 
     // Use findOneAndUpdate to avoid race condition / duplicate records
@@ -1331,7 +1331,7 @@ router.post('/login/phone', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Registration incomplete. Please complete all steps.' });
     }
 
-    const otp = generateOTP();
+    const otp = generateOTP(mobile);
     const otpExpiry = getOTPExpiry();
     user.mobileOtp = otp;
     user.mobileOtpExpiry = otpExpiry;
