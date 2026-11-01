@@ -267,6 +267,8 @@ router.get('/:chatId', authenticate, async (req, res) => {
  * Body: { message }
  */
 router.post('/:chatId/message', authenticate, async (req, res) => {
+  // Set only once this request owns the per-user lock, so a rejected duplicate can't release it.
+  let lockedUserId = null;
   try {
     // CRITICAL: This endpoint is ONLY for 'user' role
     const tokenRole = req.decodedRole;
@@ -305,12 +307,12 @@ router.post('/:chatId/message', authenticate, async (req, res) => {
     }
 
     processingUsers.add(userId);
+    lockedUserId = userId;
 
     const { chatId } = req.params;
     const { message } = req.body;
 
     if (!message || !message.trim()) {
-      processingUsers.delete(userId);
       return res.status(400).json({
         success: false,
         message: 'Message is required'
@@ -403,6 +405,8 @@ router.post('/:chatId/message', authenticate, async (req, res) => {
       success: false,
       message: error.message || 'Failed to send message'
     });
+  } finally {
+    if (lockedUserId) processingUsers.delete(lockedUserId);
   }
 });
 

@@ -8,6 +8,7 @@ import Agent from '../../models/Agent.js';
 import User from '../../models/User.js';
 import Client from '../../models/Client.js';
 import { uploadBuffer } from '../../utils/storage.js';
+import { buildGreeting } from '../../utils/voiceGreeting.js';
 
 // Voice credit billing is switched off for now. Set VOICE_BILLING_ENABLED=true in .env to turn
 // back on both the per-turn credit check and the 10-second credit deduction.
@@ -108,8 +109,8 @@ export const handleVoiceAgentWebSocket = (wss) => {
     let audioChunkCount       = 0;
     let voiceConfig           = null;
     let agentPromptOverride   = null;
-    let agentFirstMessage     = null;
-    let userAudioChunks       = [];
+    let agentName             = null;
+    let userAudioChunks      = [];
     let isReconnectingDG      = false;
     let pendingAudioChunks    = [];
     let firstMessageSent      = false;
@@ -449,11 +450,10 @@ export const handleVoiceAgentWebSocket = (wss) => {
       try {
         // Credit check before processing (deduction interval se hoti hai)
         if (VOICE_BILLING_ENABLED) {
-          const userDoc = await User.findById(userId);
+          const userDoc = await User.findById(userId).select('credits').lean();
           if (!userDoc || userDoc.credits <= 0) {
-            safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: userDoc?.credits ?? 0 });
-            cleanup();
-            return;
+            safeSend({ type: 'credit:warning', message: 'Credits khatam ho gaye hain. Please recharge karein.', remainingBalance: userDoc?.credits ?? 0 });
+            // Call band nahi karein — sirf warning bhejo
           }
         }
 
@@ -541,7 +541,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
           }
           isActive            = true;
           agentPromptOverride = null;
-          agentFirstMessage   = null;
+          agentName           = null;
 
           // Resolve Agent
           let requestedVoice = data.voiceName || 'krishna1';
@@ -550,7 +550,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
               const agent = await Agent.findById(data.agentId).lean();
               if (agent?.voiceName)            requestedVoice      = agent.voiceName;
               if (agent?.systemPrompt)         agentPromptOverride = agent.systemPrompt;
-              if (agent?.firstMessage?.trim()) agentFirstMessage   = agent.firstMessage.trim();
+              if (agent?.name)                 agentName           = agent.name;
               console.log('[VoiceAgent] 🤖 Agent resolved:', { name: agent?.name, voiceName: agent?.voiceName });
             } catch (e) {
               console.warn('[VoiceAgent] ⚠️ Could not resolve agentId:', e.message);
@@ -612,8 +612,8 @@ export const handleVoiceAgentWebSocket = (wss) => {
                 if (userDoc.credits <= 0) {
                   clearInterval(voiceBillingInterval);
                   voiceBillingInterval = null;
-                  safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: 0 });
-                  cleanup();
+                  safeSend({ type: 'credit:warning', message: 'Credits khatam ho gaye hain. Please recharge karein.', remainingBalance: 0 });
+                  // Call band nahi karein — sirf warning bhejo
                   return;
                 }
 
@@ -627,8 +627,8 @@ export const handleVoiceAgentWebSocket = (wss) => {
                 if (newBalance <= 0) {
                   clearInterval(voiceBillingInterval);
                   voiceBillingInterval = null;
-                  safeSend({ type: 'error', message: 'Insufficient credits', error: 'INSUFFICIENT_CREDITS', remainingBalance: 0 });
-                  cleanup();
+                  safeSend({ type: 'credit:warning', message: 'Credits khatam ho gaye hain. Please recharge karein.', remainingBalance: 0 });
+                  // Call band nahi karein — sirf warning bhejo
                 }
               } catch (err) {
                 console.error('[VoiceAgent] Billing interval error:', err.message);
@@ -636,15 +636,24 @@ export const handleVoiceAgentWebSocket = (wss) => {
             }, VOICE_BILLING_INTERVAL_MS);
           }
 
-          // First message — only once per session, never on Deepgram reconnects
-          if (agentFirstMessage && isActive && !firstMessageSent) {
+          // Greeting — short, personalised, localized; only once per session, never on Deepgram
+          // reconnects or when resuming a chat that already has messages.
+          if (isActive && !firstMessageSent && chat.messages.length === 0) {
             firstMessageSent = true;
             try {
+              const userDoc = await User.findById(userId).select('profile.name').lean();
+              const greeting = buildGreeting({
+                fullName:  userDoc?.profile?.name,
+                language:  data.language,
+                voiceName: voiceConfig?.name || requestedVoice,
+                agentName,
+                gender:    voiceConfig?.gender,
+              });
               const firstTurnId = createTurnId();
-              safeSend({ type: 'ai_response', text: agentFirstMessage, turnId: firstTurnId });
-              const { audioKey } = await streamElevenLabsTTS(agentFirstMessage, firstTurnId);
+              safeSend({ type: 'ai_response', text: greeting, turnId: firstTurnId });
+              const { audioKey } = await streamElevenLabsTTS(greeting, firstTurnId);
               if (isActive) {
-                chat.messages.push({ role: 'assistant', content: agentFirstMessage, ...(audioKey && { audioKey }) });
+                chat.messages.push({ role: 'assistant', content: greeting, ...(audioKey && { audioKey }) });
                 await chat.save();
               }
             } catch (err) {

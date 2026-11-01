@@ -129,6 +129,26 @@ router.put('/settings/storage-mode', authenticate, authorize('client', 'admin', 
  */
 router.get('/settings/r2-browser', authenticate, authorize('client', 'admin', 'super_admin'), async (req, res) => {
   try {
+    // Check storageMode — if s3_only, R2 browser is not applicable
+    const settings = await AppSettings.getSettings();
+    if (settings.storageMode === 's3_only') {
+      return res.status(400).json({
+        success: false,
+        message: 'R2 Browser is not available when storage mode is set to S3 Only. Switch to r2_only or both to use R2 Browser.',
+        storageMode: 's3_only'
+      });
+    }
+
+    // Validate R2 env vars before attempting connection
+    const missingVars = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY', 'R2_SECRET_KEY'].filter(v => !process.env[v]);
+    if (missingVars.length > 0) {
+      return res.status(500).json({
+        success: false,
+        message: `R2 is not configured. Missing environment variables: ${missingVars.join(', ')}`,
+        missingVars
+      });
+    }
+
     const { prefix = '', limit = 50, cursor } = req.query;
     const { S3Client, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
@@ -162,7 +182,6 @@ router.get('/settings/r2-browser', authenticate, authorize('client', 'admin', 's
       return 'other';
     };
 
-    // Generate presigned URLs for each file
     const files = await Promise.all(objects.map(async (obj) => {
       let url = null;
       try {
@@ -178,7 +197,6 @@ router.get('/settings/r2-browser', authenticate, authorize('client', 'admin', 's
       };
     }));
 
-    // Count by type
     const counts = files.reduce((acc, f) => {
       acc[f.type] = (acc[f.type] || 0) + 1;
       acc.total = (acc.total || 0) + 1;
@@ -197,7 +215,14 @@ router.get('/settings/r2-browser', authenticate, authorize('client', 'admin', 's
     });
   } catch (error) {
     console.error('[R2 Browser]', error.message);
-    return res.status(500).json({ success: false, message: error.message });
+    // Return a clear message instead of raw AWS/R2 error
+    const isConfigError = error.message?.includes('bucket') || error.message?.includes('NoSuchBucket') || error.message?.includes('InvalidAccessKeyId') || error.message?.includes('SignatureDoesNotMatch');
+    return res.status(500).json({
+      success: false,
+      message: isConfigError
+        ? `R2 configuration error: ${error.message}. Please verify R2_BUCKET, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY in your .env file.`
+        : error.message
+    });
   }
 });
 
