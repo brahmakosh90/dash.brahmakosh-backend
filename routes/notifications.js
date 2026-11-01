@@ -1,10 +1,26 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { authenticate } from '../middleware/authMiddleware.js';
 import notificationService from '../services/notificationService.js';
 import User from '../models/User.js';
 import ClientNotificationGroup from '../models/ClientNotificationGroup.js';
 import ClientNotificationCampaign from '../models/ClientNotificationCampaign.js';
-import { processDueClientNotificationCampaigns } from '../services/clientNotificationScheduler.js';
+import { sendClientNotificationCampaignNow } from '../services/clientNotificationScheduler.js';
+
+const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v) && String(v).length === 24;
+const MAX_NAME = 120;
+const MAX_DESCRIPTION = 500;
+const MAX_CAMPAIGNS_PAGE = 100;
+
+// The URL is opened by the app when the notification is tapped: allow web links only
+const isHttpUrl = (value) => {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 const router = express.Router();
 
@@ -138,7 +154,6 @@ router.get('/client/groups', authenticate, async (req, res) => {
     }
 
     const groups = await ClientNotificationGroup.find({ clientId: req.user._id })
-      .populate('userIds', '_id email profile.name mobile')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -163,8 +178,14 @@ router.post('/client/groups', authenticate, async (req, res) => {
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, message: 'Group name is required' });
     }
+    if (String(name).trim().length > MAX_NAME) {
+      return res.status(400).json({ success: false, message: `Group name must be ${MAX_NAME} characters or less` });
+    }
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({ success: false, message: 'Select at least one user for the group' });
+    }
+    if (!userIds.every(isObjectId)) {
+      return res.status(400).json({ success: false, message: 'userIds contains an invalid id' });
     }
 
     const validUsers = await User.find({
@@ -185,14 +206,10 @@ router.post('/client/groups', authenticate, async (req, res) => {
       createdBy: req.user._id
     });
 
-    const populatedGroup = await ClientNotificationGroup.findById(group._id)
-      .populate('userIds', '_id email profile.name mobile')
-      .lean();
-
     return res.status(201).json({
       success: true,
       message: 'Notification group created successfully',
-      data: populatedGroup
+      data: group.toObject()
     });
   } catch (error) {
     return res.status(500).json({
@@ -210,12 +227,26 @@ router.get('/client/campaigns', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Only client can access this endpoint' });
     }
 
-    const campaigns = await ClientNotificationCampaign.find({ clientId: req.user._id })
-      .populate('groupId', '_id name')
-      .sort({ createdAt: -1 })
-      .lean();
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), MAX_CAMPAIGNS_PAGE);
 
-    return res.json({ success: true, data: campaigns });
+    const [campaigns, countRows] = await Promise.all([
+      ClientNotificationCampaign.find({ clientId: req.user._id })
+        .select('-userIds')   // can be thousands of ids per row; the table only needs totalRecipients
+        .populate('groupId', '_id name')
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean(),
+      ClientNotificationCampaign.aggregate([
+        { $match: { clientId: req.user._id } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    // Exact totals for the stat cards, independent of how many rows are returned
+    const counts = { sent: 0, scheduled: 0, sending: 0, failed: 0 };
+    for (const row of countRows) counts[row._id] = row.count;
+
+    return res.json({ success: true, data: campaigns, counts });
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -252,6 +283,22 @@ router.post('/client/campaigns', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'postType must be immediate or scheduled' });
     }
 
+    if (String(name).trim().length > MAX_NAME) {
+      return res.status(400).json({ success: false, message: `Notification name must be ${MAX_NAME} characters or less` });
+    }
+    if (String(description).trim().length > MAX_DESCRIPTION) {
+      return res.status(400).json({ success: false, message: `Description must be ${MAX_DESCRIPTION} characters or less` });
+    }
+    if (url && !isHttpUrl(String(url).trim())) {
+      return res.status(400).json({ success: false, message: 'URL must start with http:// or https://' });
+    }
+    if (groupId && !isObjectId(groupId)) {
+      return res.status(400).json({ success: false, message: 'Invalid group' });
+    }
+    if (!groupId && !(Array.isArray(userIds) && userIds.every(isObjectId))) {
+      return res.status(400).json({ success: false, message: 'userIds contains an invalid id' });
+    }
+
     let targetUserIds = [];
 
     if (groupId) {
@@ -283,9 +330,14 @@ router.post('/client/campaigns', authenticate, async (req, res) => {
       if (!scheduledFor) {
         return res.status(400).json({ success: false, message: 'Scheduled date and time is required' });
       }
+      // Expect an ISO string with timezone (the dashboard sends UTC). A bare "2026-11-01T22:00" would be read in
+      // the server's timezone and fire hours early/late for the person who scheduled it.
       scheduleDate = new Date(scheduledFor);
       if (Number.isNaN(scheduleDate.getTime())) {
         return res.status(400).json({ success: false, message: 'Invalid scheduled date and time' });
+      }
+      if (scheduleDate.getTime() < Date.now() - 60 * 1000) {
+        return res.status(400).json({ success: false, message: 'Scheduled time must be in the future' });
       }
     }
 
@@ -304,16 +356,22 @@ router.post('/client/campaigns', authenticate, async (req, res) => {
     });
 
     if (postType === 'immediate') {
-      await processDueClientNotificationCampaigns();
+      // Send only this campaign (atomically claimed). Before, this ran every client's due campaigns inside the
+      // request, and silently did nothing if the 30s scheduler happened to be running, leaving it "scheduled".
+      await sendClientNotificationCampaignNow(campaign._id);
     }
 
     const latestCampaign = await ClientNotificationCampaign.findById(campaign._id)
+      .select('-userIds')
       .populate('groupId', '_id name')
       .lean();
 
+    const delivered = latestCampaign?.status === 'sent';
     return res.status(201).json({
       success: true,
-      message: postType === 'immediate' ? 'Notification posted successfully' : 'Notification scheduled successfully',
+      message: postType === 'immediate'
+        ? (delivered ? 'Notification posted successfully' : 'Notification could not be delivered')
+        : 'Notification scheduled successfully',
       data: latestCampaign
     });
   } catch (error) {

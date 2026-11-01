@@ -152,6 +152,12 @@ app.use(invalidateCacheOnWrite({
   '/api/meditations':    'meditation',
   '/api/chantings':      'chanting',
   '/api/live-avatars':   'liveavatar',
+  '/api/chapters':       'chapters',
+  '/api/shlokas':        'shlokas',
+  '/api/prathanas':      'prathanas',
+  '/api/spiritual-activities': 'activities',
+  '/api/spiritual-clips': 'clips',
+  '/api/puja-padhati':   'puja',
   '/api/admin':          '*',
   '/api/client':         '*',
 }));
@@ -207,6 +213,10 @@ app.use('/api/mobile/voice',   voiceRoutes);
 app.use('/api/mobile/partner', partnerProfileMobileRoutes);
 app.use('/api/mobile/content', mobileContentRoutes);
 app.use('/api/mobile/courses', mobileCourseRoutes);
+// The content routes are documented as /api/mobile/<name>, e.g. /api/mobile/spiritual-checkin (it 404'd: only
+// /api/mobile/content/<name> existed). That router has no catch-all or router-level middleware, so this alias only answers
+// its own paths and other /api/mobile/* routers still get everything else; /api/mobile/content/<name> keeps working.
+app.use('/api/mobile', mobileContentRoutes);
 app.use('/api/courses',        courseRoutes);
 app.use('/api/mobile/agents',  mobileAgentsRoutes);
 app.use('/api/mobile/panchang', mobilePanchangRoutes);

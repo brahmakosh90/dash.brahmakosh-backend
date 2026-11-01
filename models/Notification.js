@@ -23,7 +23,12 @@ const notificationSchema = new mongoose.Schema({
     userSankalpId: mongoose.Schema.Types.ObjectId,
     sankalpId: mongoose.Schema.Types.ObjectId,
     streak: Number,
-    karmaEarned: Number
+    karmaEarned: Number,
+    // client broadcast payload (without these the link/campaign were silently dropped on save)
+    url: String,
+    campaignId: String,
+    groupId: String,
+    clientId: String
   },
   isRead: {
     type: Boolean,

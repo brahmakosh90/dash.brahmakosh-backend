@@ -6,6 +6,24 @@ import { sendFcmToTokens } from '../utils/fcmMessaging.js';
 let schedulerStarted = false;
 let isProcessing = false;
 
+// A campaign stuck in 'sending' longer than this (server crashed mid-send) may be claimed again
+const STALE_SENDING_MS = 10 * 60 * 1000;
+
+// Atomic claim: only one caller (scheduler tick, immediate post, another server instance) gets to send a campaign,
+// so a user never receives the same notification twice.
+const claimCampaign = (id) =>
+  ClientNotificationCampaign.findOneAndUpdate(
+    {
+      _id: id,
+      $or: [
+        { status: 'scheduled' },
+        { status: 'sending', updatedAt: { $lt: new Date(Date.now() - STALE_SENDING_MS) } }
+      ]
+    },
+    { status: 'sending' },
+    { new: true }
+  );
+
 const normalizeUserIds = (ids = []) => {
   const unique = new Set(ids.map((id) => id?.toString()).filter(Boolean));
   return [...unique];
@@ -21,6 +39,7 @@ const sendCampaign = async (campaign) => {
   const userIds = validUsers.map((u) => u._id.toString());
   const now = new Date();
   let pushMetrics = { sentTokens: 0, failedTokens: 0, totalTokens: 0 };
+  let pushSkipped = false;
 
   const fcmTokensCount = validUsers.reduce((sum, u) => sum + ((u.fcmTokens || []).length || 0), 0);
   console.log('[ClientNotification] Campaign send started', {
@@ -74,6 +93,7 @@ const sendCampaign = async (campaign) => {
         }
       });
 
+      pushSkipped = !!pushResult?.skipped;
       pushMetrics = {
         sentTokens: pushResult?.sent || 0,
         failedTokens: pushResult?.failed || 0,
@@ -98,6 +118,9 @@ const sendCampaign = async (campaign) => {
   }
 
   const allTokensFailed = pushMetrics.totalTokens > 0 && pushMetrics.sentTokens === 0;
+  let warning = '';
+  if (fcmTokens.length === 0) warning = 'Saved in the app inbox. None of the recipients has a push-enabled device yet.';
+  else if (pushSkipped) warning = 'Saved in the app inbox, but push was not sent: Firebase is not configured on the server.';
   const campaignUpdate = {
     status: allTokensFailed ? 'failed' : 'sent',
     sentAt: now,
@@ -106,7 +129,7 @@ const sendCampaign = async (campaign) => {
     // store token delivery metrics
     sentCount: pushMetrics.sentTokens,
     failedCount: pushMetrics.failedTokens,
-    errorMessage: allTokensFailed ? 'All device tokens failed to receive push' : ''
+    errorMessage: allTokensFailed ? 'All device tokens failed to receive push' : warning
   };
 
   await ClientNotificationCampaign.findByIdAndUpdate(campaign._id, {
@@ -122,34 +145,47 @@ const sendCampaign = async (campaign) => {
   });
 };
 
+const sendClaimed = async (campaign) => {
+  try {
+    campaign.userIds = normalizeUserIds(campaign.userIds);
+    await sendCampaign(campaign);
+  } catch (error) {
+    await ClientNotificationCampaign.findByIdAndUpdate(campaign._id, {
+      status: 'failed',
+      errorMessage: error.message || 'Failed to send campaign'
+    });
+  }
+};
+
+/** Send one campaign right now (used by "Immediate Post"). No-op if another worker already claimed it. */
+export const sendClientNotificationCampaignNow = async (campaignId) => {
+  const claimed = await claimCampaign(campaignId);
+  if (claimed) await sendClaimed(claimed);
+};
+
 export const processDueClientNotificationCampaigns = async () => {
   if (isProcessing) return;
   isProcessing = true;
 
   try {
     const now = new Date();
-    const campaigns = await ClientNotificationCampaign.find({
-      status: 'scheduled',
-      $or: [{ postType: 'immediate' }, { scheduledFor: { $lte: now } }]
-    }).sort({ createdAt: 1 });
+    const due = await ClientNotificationCampaign.find({
+      $or: [
+        { status: 'scheduled', $or: [{ postType: 'immediate' }, { scheduledFor: { $lte: now } }] },
+        { status: 'sending', updatedAt: { $lt: new Date(now.getTime() - STALE_SENDING_MS) } }
+      ]
+    })
+      .select('_id')
+      .sort({ createdAt: 1 })
+      .lean();
 
-    if (campaigns.length > 0) {
-      console.log('[ClientNotificationScheduler] Due campaigns found', {
-        count: campaigns.length,
-        now: now.toISOString()
-      });
+    if (due.length > 0) {
+      console.log('[ClientNotificationScheduler] Due campaigns found', { count: due.length, now: now.toISOString() });
     }
 
-    for (const campaign of campaigns) {
-      try {
-        campaign.userIds = normalizeUserIds(campaign.userIds);
-        await sendCampaign(campaign);
-      } catch (error) {
-        await ClientNotificationCampaign.findByIdAndUpdate(campaign._id, {
-          status: 'failed',
-          errorMessage: error.message || 'Failed to send campaign'
-        });
-      }
+    for (const { _id } of due) {
+      const claimed = await claimCampaign(_id);
+      if (claimed) await sendClaimed(claimed);
     }
   } finally {
     isProcessing = false;

@@ -6,6 +6,7 @@ import multer from 'multer';
 import { uploadFile, deleteFile, getPresignedUrl, extractS3KeyFromUrl } from '../utils/storage.js';
 import { authenticate } from '../middleware/auth.js';
 
+import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
 
 const resolveClientObjectId = async (candidate) => {
@@ -46,7 +47,7 @@ const upload = multer({
 });
 
 // GET all spiritual activities
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, cacheGet({ ttlSeconds: 30, tag: 'activities', perUser: true }), async (req, res) => {
   try {
     const query = { isDeleted: false };
     

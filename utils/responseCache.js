@@ -27,10 +27,13 @@ export const invalidateTag = (tag) => {
   }
 };
 
-export const cacheGet = ({ ttlSeconds = 60, tag }) => (req, res, next) => {
+// perUser: for authenticated lists whose content depends on who is asking (scoped by client / user). Place it AFTER
+// the auth middleware so req.user exists; the key then includes the caller, so one account never sees another's data.
+export const cacheGet = ({ ttlSeconds = 60, tag, perUser = false }) => (req, res, next) => {
   if (req.method !== 'GET') return next();
+  if (perUser && !req.user?._id) return next();
 
-  const key = req.originalUrl;
+  const key = perUser ? `${req.user.role}:${req.user._id}|${req.originalUrl}` : req.originalUrl;
   const hit = store.get(key);
   if (hit && hit.expires > Date.now()) {
     res.set({ 'X-Cache': 'HIT', 'Cache-Control': 'public, max-age=0, must-revalidate' });

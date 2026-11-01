@@ -3,6 +3,7 @@ import Prathana from '../models/Prathana.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { getPresignedUrl, generateUploadUrl } from '../utils/storage.js';
 
+import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
 
 // POST /api/prathanas/upload-url - Generate presigned URL for direct S3 upload
@@ -35,7 +36,7 @@ router.post('/upload-url', authenticate, async (req, res) => {
 });
 
 // Get all prathanas for a client
-router.get('/', authenticate, authorize('client','user'), async (req, res) => {
+router.get('/', authenticate, authorize('client','user'), cacheGet({ ttlSeconds: 30, tag: 'prathanas', perUser: true }), async (req, res) => {
   try {
     const clientId = req.user.role === 'client' ? req.user._id : req.user.clientId;
     

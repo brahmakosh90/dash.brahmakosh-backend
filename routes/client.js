@@ -39,6 +39,7 @@ import { uploadBuffer } from '../utils/storage.js';
 import ConversationSession from '../models/ConversationSession.js';
 import LiveAvatar from '../models/LiveAvatar.js';
 
+import { mapLimit } from '../utils/mapLimit.js';
 const router = express.Router();
 
 const getAstrologyToolsConfig = (clientDoc) => {
@@ -3782,24 +3783,23 @@ router.get('/api-health', authenticate, authorize('client', 'admin', 'super_admi
     { name: 'Health Check',         group: 'System',    method: 'GET', url: `${BASE}/health` },
   ];
 
-  const results = await Promise.all(
-    endpoints.map(async (ep) => {
-      const start = Date.now();
-      try {
-        const response = await fetch(ep.url, {
-          method: ep.method,
-          headers: { Authorization: token, 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(8000)
-        });
-        const ms = Date.now() - start;
-        const healthy = response.status > 0 && response.status < 500;
-        const label = response.status < 300 ? 'OK' : response.status < 400 ? 'Redirect' : response.status < 500 ? 'Client Err' : 'Server Err';
-        return { ...ep, url: ep.url.replace(BASE, '/api'), status: response.status, ms, healthy, label };
-      } catch (err) {
-        return { ...ep, url: ep.url.replace(BASE, '/api'), method: ep.method, status: 0, ms: Date.now() - start, healthy: false, label: 'Unreachable', error: err.message };
-      }
-    })
-  );
+  // A few probes at a time: firing them all at once makes the server queue behind its own probes and inflates every time
+  const results = await mapLimit(endpoints, 4, async (ep) => {
+    const start = Date.now();
+    try {
+      const response = await fetch(ep.url, {
+        method: ep.method,
+        headers: { Authorization: token, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(8000)
+      });
+      const ms = Date.now() - start;
+      const healthy = response.status > 0 && response.status < 500;
+      const label = response.status < 300 ? 'OK' : response.status < 400 ? 'Redirect' : response.status < 500 ? 'Client Err' : 'Server Err';
+      return { ...ep, url: ep.url.replace(BASE, '/api'), status: response.status, ms, healthy, label };
+    } catch (err) {
+      return { ...ep, url: ep.url.replace(BASE, '/api'), method: ep.method, status: 0, ms: Date.now() - start, healthy: false, label: 'Unreachable', error: err.message };
+    }
+  });
 
   const totalHealthy = results.filter(r => r.healthy).length;
   const avgMs = Math.round(results.reduce((s, r) => s + r.ms, 0) / results.length);

@@ -308,69 +308,51 @@ router.get('/dashboard/overview', async (req, res) => {
     ]);
 
     const clientIds = allClients.map(c => c._id);
-
-    const [totalUsers, activeUsers] = await Promise.all([
-      User.countDocuments({ clientId: { $in: clientIds } }),
-      User.countDocuments({ clientId: { $in: clientIds }, isActive: true })
-    ]);
-
-    // Last 6 months user registrations
     const now = new Date();
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    const userGrowthRaw = await User.aggregate([
-      { $match: { clientId: { $in: clientIds }, createdAt: { $gte: sixMonthsAgo } } },
-      { $group: {
-        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
-        count: { $sum: 1 }
-      }},
-      { $sort: { '_id.year': 1, '_id.month': 1 } }
-    ]);
-
-    // Fill missing months with 0
-    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const userGrowth = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const found = userGrowthRaw.find(r => r._id.year === d.getFullYear() && r._id.month === d.getMonth() + 1);
-      userGrowth.push({ month: monthNames[d.getMonth()], count: found ? found.count : 0 });
-    }
-
-    // Last 6 months client registrations
-    const clientGrowthRaw = await Client.aggregate([
-      { $match: { ...clientQuery, createdAt: { $gte: sixMonthsAgo } } },
-      { $group: {
-        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
-        count: { $sum: 1 }
-      }},
-      { $sort: { '_id.year': 1, '_id.month': 1 } }
-    ]);
-    const clientGrowth = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const found = clientGrowthRaw.find(r => r._id.year === d.getFullYear() && r._id.month === d.getMonth() + 1);
-      clientGrowth.push({ month: monthNames[d.getMonth()], count: found ? found.count : 0 });
-    }
-
-    // Users per client (top 5)
-    const usersPerClient = await User.aggregate([
-      { $match: { clientId: { $in: clientIds } } },
-      { $group: { _id: '$clientId', userCount: { $sum: 1 } } },
-      { $sort: { userCount: -1 } },
-      { $limit: 5 }
-    ]);
-    const usersPerClientData = usersPerClient.map(u => {
-      const c = allClients.find(cl => cl._id.toString() === u._id?.toString());
-      return { clientName: c?.businessName || c?.email || 'Unknown', userCount: u.userCount };
-    });
-
-    // New users this month
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const [newUsersThisMonth, newUsersLastMonth, newClientsThisMonth] = await Promise.all([
+    const monthlyGroup = { $group: { _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } }, count: { $sum: 1 } } };
+    const monthlySort = { $sort: { '_id.year': 1, '_id.month': 1 } };
+
+    // All independent: run together instead of one after another
+    const [
+      totalUsers, activeUsers, userGrowthRaw, clientGrowthRaw, usersPerClient,
+      newUsersThisMonth, newUsersLastMonth, newClientsThisMonth
+    ] = await Promise.all([
+      User.countDocuments({ clientId: { $in: clientIds } }),
+      User.countDocuments({ clientId: { $in: clientIds }, isActive: true }),
+      User.aggregate([{ $match: { clientId: { $in: clientIds }, createdAt: { $gte: sixMonthsAgo } } }, monthlyGroup, monthlySort]),
+      Client.aggregate([{ $match: { ...clientQuery, createdAt: { $gte: sixMonthsAgo } } }, monthlyGroup, monthlySort]),
+      User.aggregate([
+        { $match: { clientId: { $in: clientIds } } },
+        { $group: { _id: '$clientId', userCount: { $sum: 1 } } },
+        { $sort: { userCount: -1 } },
+        { $limit: 5 }
+      ]),
       User.countDocuments({ clientId: { $in: clientIds }, createdAt: { $gte: thisMonthStart } }),
       User.countDocuments({ clientId: { $in: clientIds }, createdAt: { $gte: lastMonthStart, $lt: thisMonthStart } }),
       Client.countDocuments({ ...clientQuery, createdAt: { $gte: thisMonthStart } })
     ]);
+
+    // Fill missing months with 0
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const fillMonths = (raw) => {
+      const out = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const found = raw.find(r => r._id.year === d.getFullYear() && r._id.month === d.getMonth() + 1);
+        out.push({ month: monthNames[d.getMonth()], count: found ? found.count : 0 });
+      }
+      return out;
+    };
+    const userGrowth = fillMonths(userGrowthRaw);
+    const clientGrowth = fillMonths(clientGrowthRaw);
+
+    const usersPerClientData = usersPerClient.map(u => {
+      const c = allClients.find(cl => cl._id.toString() === u._id?.toString());
+      return { clientName: c?.businessName || c?.email || 'Unknown', userCount: u.userCount };
+    });
 
     // Recent clients (last 5)
     const recentClients = allClients.slice(0, 5).map(c => ({
@@ -770,22 +752,9 @@ router.get('/api-health', async (req, res) => {
 
     // ── Partner APIs ──
     { name: 'Partner Profile',           group: 'Partner',  method: 'GET', url: `${BASE}/mobile/partner/profile` },
-    { name: 'Partner Login',             group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/login` },
-    { name: 'Partner Register Step1',    group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/register/step1` },
-    { name: 'Partner Register Step1 Verify', group: 'Partner', method: 'POST', url: `${BASE}/mobile/partner/register/step1/verify` },
-    { name: 'Partner Register Step2',    group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/register/step2` },
-    { name: 'Partner Register Step2 Verify', group: 'Partner', method: 'POST', url: `${BASE}/mobile/partner/register/step2/verify` },
-    { name: 'Partner Register Step3',    group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/register/step3` },
-    { name: 'Partner Register Step4',    group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/register/step4` },
-    { name: 'Partner Check Email',       group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/check-email` },
-    { name: 'Partner Resend Email OTP',  group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/register/resend-email-otp` },
-    { name: 'Partner Resend Phone OTP',  group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/register/resend-phone-otp` },
-    { name: 'Partner Update Profile',    group: 'Partner',  method: 'PUT',  url: `${BASE}/mobile/partner/profile` },
-    { name: 'Partner Profile Picture',   group: 'Partner',  method: 'POST', url: `${BASE}/mobile/partner/profile/picture` },
 
     // ── Partner Chat APIs ──
     { name: 'Chat - Partner Status GET', group: 'Partner',  method: 'GET',   url: `${BASE}/chat/partner/status` },
-    { name: 'Chat - Partner Status SET', group: 'Partner',  method: 'PATCH', url: `${BASE}/chat/partner/status` },
     { name: 'Chat - Partner Requests',   group: 'Partner',  method: 'GET',   url: `${BASE}/chat/partner/requests` },
     { name: 'Chat - Available Partners', group: 'Partner',  method: 'GET',   url: `${BASE}/chat/partners` },
     { name: 'Chat - Conversations',      group: 'Partner',  method: 'GET',   url: `${BASE}/chat/conversations` },
@@ -829,8 +798,17 @@ router.get('/api-health', async (req, res) => {
     { name: 'Shlokas',                   group: 'Content',  method: 'GET', url: `${BASE}/shlokas` },
   ];
 
-  const results = await Promise.all(
-    endpoints.map(async (ep) => {
+  // Probes run a few at a time. Firing all ~45 at once made the server queue behind its own probes, so every
+  // endpoint (even 401s that do no work) read 500ms+ and the numbers said nothing about real latency.
+  // Only GET is probed: the old POST/PUT/PATCH probes hit register/login/OTP/status routes with the admin's token.
+  const PROBE_CONCURRENCY = 4;
+  const results = new Array(endpoints.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < endpoints.length) {
+      const idx = cursor++;
+      const ep = endpoints[idx];
+      results[idx] = await (async () => {
       const start = Date.now();
       try {
         const response = await fetch(ep.url, {
@@ -862,8 +840,10 @@ router.get('/api-health', async (req, res) => {
           error: err.message
         };
       }
-    })
-  );
+      })();
+    }
+  };
+  await Promise.all(Array.from({ length: PROBE_CONCURRENCY }, worker));
 
   const totalHealthy = results.filter(r => r.healthy).length;
   const avgMs = Math.round(results.reduce((s, r) => s + r.ms, 0) / results.length);

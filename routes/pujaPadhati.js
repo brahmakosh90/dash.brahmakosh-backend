@@ -2,10 +2,11 @@ import express from 'express';
 import PujaPadhati from '../models/PujaPadhati.js';
 import { getPresignedUrl, generateUploadUrl } from '../utils/storage.js';
 
+import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
 
 // GET all pujas with filtering and sorting
-router.get('/', async (req, res) => {
+router.get('/', cacheGet({ ttlSeconds: 120, tag: 'puja' }), async (req, res) => {
   try {
     const { status, category, subcategory, clientId } = req.query;
     const filter = {};

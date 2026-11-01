@@ -39,34 +39,37 @@ const getUserStats = async (req, res) => {
     // Always show only current user's sessions
     const userId = req.user._id || req.user.userId;
     const { category } = req.query;
-    console.log('[User Stats] Getting stats for user:', userId, 'Category:', category);
-    
+
     // Query only current user's sessions
     let query = { userId };
     if (category && category !== 'all') {
       query.type = category;
     }
-    
-    let sessions = await SpiritualSession.find(query).sort({ createdAt: -1 });
-    
-    // Try to populate with User model first
-    try {
-      sessions = await SpiritualSession.populate(sessions, {
-        path: 'userId',
-        select: 'email profile.name profile.dob fullName'
-      });
-    } catch (error) {
-      // If User model fails, try Client model
-      try {
-        const Client = (await import('../models/Client.js')).default;
-        sessions = await SpiritualSession.populate(sessions, {
-          path: 'userId',
-          model: Client,
-          select: 'email fullName businessName'
-        });
-      } catch (clientError) {
-        console.log('Both User and Client model populate failed');
-      }
+
+    // These reads don't depend on each other: run them together instead of one after another.
+    // (All sessions belong to this one user, so the old per-session populate of userId was an extra query for nothing.)
+    const User = (await import('../models/User.js')).default;
+    const KarmaPointsTransaction = (await import('../models/KarmaPointsTransaction.js')).default;
+    const RewardRedemption = (await import('../models/RewardRedemption.js')).default;
+    const UserSankalp = (await import('../models/UserSankalp.js')).default;
+
+    const [sessions, currentUser, userSankalpas, bonusTransactions, redemptions] = await Promise.all([
+      SpiritualSession.find(query).sort({ createdAt: -1 }).lean(),
+      User.findById(userId).select('email profile.name profile.dob karmaPoints fullName').lean(),
+      UserSankalp.find({ userId }).select('karmaEarned completionBonusEarned').lean(),
+      KarmaPointsTransaction.find({ userId }).select('amount').lean(),
+      RewardRedemption.find({ userId, status: 'completed' }).select('karmaPointsSpent').lean()
+    ]);
+
+    // Same shape the populate used to attach to each session's userId
+    if (currentUser) {
+      const userBrief = {
+        _id: currentUser._id,
+        email: currentUser.email,
+        fullName: currentUser.fullName,
+        profile: { name: currentUser.profile?.name, dob: currentUser.profile?.dob }
+      };
+      sessions.forEach((s) => { s.userId = userBrief; });
     }
     
     // Calculate total stats based on role
@@ -89,31 +92,20 @@ const getUserStats = async (req, res) => {
     // Calculate karma points breakdown
     const totalKarmaFromActivities = sessions.reduce((sum, session) => sum + (session.karmaPoints || 0), 0);
     
-    // Get user details and bonus points
-    const User = (await import('../models/User.js')).default;
-    const KarmaPointsTransaction = (await import('../models/KarmaPointsTransaction.js')).default;
-    const RewardRedemption = (await import('../models/RewardRedemption.js')).default;
-    const UserSankalp = (await import('../models/UserSankalp.js')).default;
-    
-    const currentUser = await User.findById(userId).select('email profile.name profile.dob karmaPoints');
-    
     // Use User.karmaPoints as source of truth (already includes activities + sankalp + bonus - spent)
     const totalKarmaPoints = currentUser?.karmaPoints || 0;
     
     // Calculate sankalp karma points for breakdown only
-    const userSankalpas = await UserSankalp.find({ userId });
     const totalSankalpKarma = userSankalpas.reduce((sum, us) => {
       return sum + (us.karmaEarned || 0) + (us.completionBonusEarned || 0);
     }, 0);
     
     // Calculate bonus points from transactions
-    const bonusTransactions = await KarmaPointsTransaction.find({ userId });
     const totalBonusPoints = bonusTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    
+
     // Calculate spent points from redemptions
-    const redemptions = await RewardRedemption.find({ userId, status: 'completed' });
     const totalSpentPoints = redemptions.reduce((sum, r) => sum + (r.karmaPointsSpent || 0), 0);
-    const averageCompletion = sessions.length > 0 ? 
+    const averageCompletion = sessions.length > 0 ?
       sessions.reduce((sum, session) => sum + (session.completionPercentage || 100), 0) / sessions.length : 0;
     
     // Calculate category-wise stats
@@ -199,21 +191,23 @@ const getUserStats = async (req, res) => {
     
     // Get recent activities based on role
     const { getPresignedUrl } = await import('../utils/storage.js');
-    const recentActivities = await Promise.all(sessions.map(async session => {
+    // Sessions are newest-first and only `limit` are returned: don't build/sign the rest (users can have thousands)
+    const activityLimit = Math.min(parseInt(req.query.limit) || 500, 500);
+    const recentActivities = await Promise.all(sessions.slice(0, activityLimit).map(async session => {
       const completionPercentage = session.completionPercentage !== undefined ? session.completionPercentage :
                                   (session.targetDuration > 0 ? Math.round((session.actualDuration / session.targetDuration) * 100) : 100);
-      
+
       let status = session.status || 'completed';
       if (!session.status && session.type !== 'chanting') {
         if (completionPercentage < 100) {
           status = completionPercentage >= 50 ? 'incomplete' : 'interrupted';
         }
       }
-      
+
       // Generate presigned URLs with 7 days expiry (max allowed)
       let videoUrl = '';
       let audioUrl = '';
-      
+
       try {
         if (session.videoKey) {
           videoUrl = await getPresignedUrl(session.videoKey, 604800); // 7 days
@@ -224,7 +218,7 @@ const getUserStats = async (req, res) => {
       } catch (error) {
         console.error('Error generating presigned URLs for session:', session._id, error);
       }
-      
+
       let activityData = {
         id: session._id,
         userId: session.userId, // Add user ID
@@ -262,9 +256,7 @@ const getUserStats = async (req, res) => {
       return activityData;
     }));
     
-    // Apply limit after processing
-    const limit = parseInt(req.query.limit) || 500;
-    const limitedActivities = recentActivities.slice(0, limit);
+    const limitedActivities = recentActivities;
     
     // User details already fetched above as currentUser
     const stats = {

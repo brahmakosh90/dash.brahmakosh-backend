@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import multer from 'multer';
 import { uploadFile, getPresignedUrl } from '../utils/storage.js';
 
+import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -35,7 +36,7 @@ const getClientId = async (user, decodedClientId) => {
 };
 
 // GET all chapters
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, cacheGet({ ttlSeconds: 30, tag: 'chapters', perUser: true }), async (req, res) => {
   try {
     const { includeInactive } = req.query;
     

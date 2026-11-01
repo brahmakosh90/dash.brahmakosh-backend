@@ -5,6 +5,7 @@ import Shloka from '../models/Shloka.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { getPresignedUrl, generateUploadUrl, uploadBuffer, extractS3KeyFromUrl } from '../utils/storage.js';
 
+import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
 
 const uploadAudio = multer({
@@ -39,7 +40,7 @@ const getClientId = (user, req = null) => {
 };
 
 // GET all shlokas with pagination and filters
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, cacheGet({ ttlSeconds: 30, tag: 'shlokas', perUser: true }), async (req, res) => {
   try {
     const { 
       page = 1, 

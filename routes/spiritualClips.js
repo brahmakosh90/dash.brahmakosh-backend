@@ -23,10 +23,9 @@ const upload = multer({
 
 import mongoose from 'mongoose';
 
+import { cacheGet } from '../utils/responseCache.js';
 // Helper function to extract clientId
 const getClientId = (req) => {
-  console.log('User object:', req.user);
-  
   if (req.user.role === 'client') {
     return req.user.clientId; // This is string format like CLI-BSJFUI
   } else if (req.user.role === 'user') {
@@ -92,20 +91,23 @@ router.get('/configuration/:configId', authenticate, async (req, res) => {
 });
 
 // GET /api/spiritual-clips - Get all clips for client
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, cacheGet({ ttlSeconds: 30, tag: 'clips', perUser: true }), async (req, res) => {
   try {
-    console.log('Fetching all clips');
-
     const query = {};
     if (req.query.type) query.type = req.query.type;
 
+    // Clients and their users see only their own client's clips. This used to list every client's clips
+    // (a data leak, and the reason the list grew with the whole platform). Admins still see all.
+    const scopedClientId = getClientId(req);
+    if (scopedClientId) query.clientId = scopedClientId;
+
     const clips = await SpiritualClip.find(query)
       .populate('suitableConfiguration', 'title description')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const clipsWithSignedUrls = await Promise.all(clips.map(async (clip) => {
-      const clipObj = clip.toObject();
-      
+    const clipsWithSignedUrls = await Promise.all(clips.map(async (clipObj) => {
+
       // Ensure suitableConfiguration is always present in response
       if (!clipObj.suitableConfiguration) {
         clipObj.suitableConfiguration = null;
@@ -120,8 +122,6 @@ router.get('/', authenticate, async (req, res) => {
       
       return clipObj;
     }));
-
-    console.log(`Found ${clips.length} clips`);
 
     res.json({
       success: true,
