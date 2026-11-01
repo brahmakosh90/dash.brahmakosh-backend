@@ -66,7 +66,10 @@ const getClientId = async (req) => {
     return clientId;
   }
   
-  throw new Error('Invalid role for this operation.');
+  // Wrong kind of account (e.g. an admin token), not a failed login: 403, so the app doesn't treat it as an expired session
+  const roleError = new Error('This endpoint is only available to client and user accounts.');
+  roleError.status = 403;
+  throw roleError;
 };
 
 // POST /api/brahm-avatars/upload-url - Generate presigned URL for direct S3 upload
@@ -113,7 +116,7 @@ router.get('/', authenticate, async (req, res) => {
       clientId = await getClientId(req);
       console.log('🎯 Resolved clientId:', clientId);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message || 'Unable to determine client ID. Please ensure your token is valid.'
       });
@@ -205,7 +208,7 @@ router.get('/:id', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message || 'Unable to determine client ID. Please ensure your token is valid.'
       });
@@ -276,7 +279,7 @@ router.post('/direct', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -382,7 +385,7 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -496,7 +499,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message || 'Unable to determine client ID. Please ensure your token is valid.'
       });
@@ -551,7 +554,7 @@ router.patch('/:id/toggle-status', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -594,7 +597,7 @@ router.patch('/:id/views', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -636,7 +639,7 @@ router.patch('/:id/like', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -678,7 +681,7 @@ router.patch('/:id/shares', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });

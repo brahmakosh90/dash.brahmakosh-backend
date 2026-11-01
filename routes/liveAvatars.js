@@ -48,7 +48,10 @@ const getClientId = async (req) => {
     return clientId;
   }
   
-  throw new Error('Invalid role for this operation.');
+  // Wrong kind of account (e.g. an admin token), not a failed login: 403, so the app doesn't treat it as an expired session
+  const roleError = new Error('This endpoint is only available to client and user accounts.');
+  roleError.status = 403;
+  throw roleError;
 };
 
 // POST /api/live-avatars/upload-url - Generate presigned URL for direct S3 upload
@@ -89,7 +92,7 @@ router.post('/direct', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -238,7 +241,7 @@ router.get('/', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -316,7 +319,7 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -423,7 +426,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
@@ -478,7 +481,7 @@ router.patch('/:id/toggle-status', authenticate, async (req, res) => {
     try {
       clientId = await getClientId(req);
     } catch (clientIdError) {
-      return res.status(401).json({
+      return res.status(clientIdError.status || 401).json({
         success: false,
         message: clientIdError.message
       });
