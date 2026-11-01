@@ -1,0 +1,431 @@
+{
+  "createdAt": "2026-11-01T17:40:06.070Z",
+  "totalUsers": 23,
+  "totalTokens": 44,
+  "users": [
+    {
+      "_id": "6978b99dd9a3abad91ea4ce4",
+      "email": "vijay.wiz@gmail.com",
+      "mobile": "+918147540362",
+      "fcmTokens": [
+        {
+          "token": "dowdo0zqSYKkmk64-6JEE3:APA91bGiaivCO7I9kdgwyXtVPkTOaW_KuTfUxV8LS_xb4jiRNka9e_ut5LFRRvugMF8Q52k_uPAQFkbuFLmBe-elhyz4eYoqDip-rRZYLpE_aWT8AH4Uwb4",
+          "platform": "android",
+          "updatedAt": "2026-07-27T10:07:35.352Z",
+          "_id": "6a672de741b388275da1d339"
+        }
+      ]
+    },
+    {
+      "_id": "6969f1e0e3887150ea686d05",
+      "email": "brahmakoshtech@gmail.com",
+      "fcmTokens": [
+        {
+          "token": "egAYm3YeTUdqqb-PoZ3saK:APA91bF9RsSly_jDA-kvLiwT5Y5G5Aapkd1ReJ3Y7hWY5td7ddYSZpEsnYyG9ls2vP2mb2Vl_Ldl9rhKybncZc_E0j8HbEu04RT5xz1gqIYosaJjMPOAOHo",
+          "platform": "ios",
+          "updatedAt": "2026-06-24T12:01:24.204Z",
+          "_id": "6a3bc7147310c1b0fed2079a"
+        },
+        {
+          "token": "c6GtgT_A50SQo4epQePA87:APA91bHLdPu01db76cSytVNI0VgOsdVjc41K5NneDpL2BhoRuGGeSvWqU6AsASEG1P_YSOFtdjP7hc9co_M-PyEul8j4u4j_A443ZKt1CJKB8eLOV-uaFgo",
+          "platform": "ios",
+          "updatedAt": "2026-04-13T07:57:37.807Z",
+          "_id": "69dca1f1f35dd957135bd891"
+        },
+        {
+          "token": "eweTb8LLv0fgpxFDHkGjjp:APA91bH37F2KZc4Fn4sel7GK31WhtgC9LStLC1mvLAboHBms98xoMETre4zrJSNGHfztSfqtf7Hx2XMoOiU7Gt-V98Okj4Vzt7IB_Hl5L-IazlhsbZx_Hzg",
+          "platform": "ios",
+          "updatedAt": "2026-03-31T13:17:40.631Z",
+          "_id": "69cbc974a06cb21fd2acc813"
+        }
+      ]
+    },
+    {
+      "_id": "6978b25fd9a3abad91ea4c97",
+      "email": "diintechteam10@gmail.com",
+      "mobile": "+91742849081",
+      "fcmTokens": [
+        {
+          "token": "c52C3lYtSE3Kg9K5-RzvZ0:APA91bFzFOrQOKyfvf4fPTD5wZM7Uz-8ae3okAeLBfIAZJ0z6z0BQHVins0vbTebPOTqbPbCcuyhTbYULIa9UfFe-lvxzXPO_C8ETodGhCD_NInv6rCR4pM",
+          "platform": "ios",
+          "updatedAt": "2026-09-01T12:40:49.294Z",
+          "_id": "6a96c7d105fa8ffc0fc10d62"
+        },
+        {
+          "token": "dq8q2LHdYkFSsiM82hciD3:APA91bF38vAkLI7J7EWOuYnIwl--FVsWxq_1thwdK9ZGnsYojfLJ1A9nT7wVRGFAQj0VlyJOWspl0eQrdayn9ryZRYq9L6Xv_O0eOxgGO7DjrOA8Tp1AFrk",
+          "platform": "ios",
+          "updatedAt": "2026-08-22T05:32:05.305Z",
+          "_id": "6a893455d6bc73442cf2988b"
+        },
+        {
+          "token": "cfKGZ4AA_EhYmZzNUE_RWe:APA91bFceH_XWVQUMK1IQUrLx-HRatbX3ifhpRbdR4ThOhXJyqzzIBwy2AORPsSol47ksDFqlhKIES25c1OR6EV94tDq3Z91HzdfsAC2VeOaQr9pDISWzqE",
+          "platform": "ios",
+          "updatedAt": "2026-05-13T12:23:02.230Z",
+          "_id": "6a046d267310c1b0fec2a40c"
+        },
+        {
+          "token": "frLSbONa2krJm2QtCT-Ov0:APA91bHkSME5wVdffaY023d50o9FoNMBRBCmTJcpSHt7EpifAHIw-A9fX6BlsLY9gd2nhQPp64Csv7O191AwRj-GiHDmopWhC6vzePgdoQLrrw_IyLQTvfw",
+          "platform": "ios",
+          "updatedAt": "2026-04-29T18:58:12.902Z",
+          "_id": "69f254c46b4d1914e463a26c"
+        },
+        {
+          "token": "fimXJURh2kyLl8Uu-pQ9gm:APA91bHYIC9oT5YCn_L1CZMLOKLY_-zD4vrfoml_uWFhieLHf_lZ-knEZxIHegkzZt5s-haBY0XDmRwpf1BAv1KSSz3bDCjhtEBPh__rbF4ThKp7ZEsiAt0",
+          "platform": "ios",
+          "updatedAt": "2026-04-27T22:53:40.842Z",
+          "_id": "69efe8f4014afcf1cbe9ce72"
+        },
+        {
+          "token": "datHVoKsAEbhjMq92r0kjj:APA91bHMKEY71rPTti58KFHlhVA5vxvPGs2ttYpVTVAboZASBpWaoC9N4yWoXwbRHx8hZkq9VHQy3LnBtGTasXSIZlZBnDI6qqyMzKGFvTr4Z64gwPD2MgE",
+          "platform": "ios",
+          "updatedAt": "2026-04-25T17:29:57.336Z",
+          "_id": "69ecfa15014afcf1cbe8bc3a"
+        },
+        {
+          "token": "cIhjYOAbjkxBjEeuksJuNc:APA91bHu5szSWiA1YldN0Wm5GQmt3sPvHydb2EaDwFCvGKpqUtaeAxibRP3uLsMcLeeqg0NLlEPkpdsXbLNu2ku7-pvl1_Q45gzUz_VvuuYjAppQFdN5Gtc",
+          "platform": "ios",
+          "updatedAt": "2026-04-24T19:55:52.018Z",
+          "_id": "69ebcac8a4c315bd744537f0"
+        },
+        {
+          "token": "dCIIb6bVjUOTtg3J_cct4x:APA91bHa_7vsD54l2ADoKmn79ZjyMgJGqoBVolzUvzLDcHCpiTQzE8Bimr29CeL7KrbBOMMqd3HXUz1ul4nZkyNpJhcFGqioYmJLFqtN_n5t8cYOZNXIfRo",
+          "platform": "ios",
+          "updatedAt": "2026-04-23T15:17:24.229Z",
+          "_id": "69ea38046db08564b959a3cc"
+        },
+        {
+          "token": "eUhRPKzEKk2mtprlRZQb7w:APA91bG_aOlUlZnMwbFL-5XUqVTOaOnBLzi5b0-FNcHBAhIexmLeyW6_K1UJRgrbHB4HKYVBjDswz7viQSnU76gg1joVrD7ssQuISLIs6su8H-TaZKYd8Pk",
+          "platform": "ios",
+          "updatedAt": "2026-04-18T14:29:22.035Z",
+          "_id": "69e395421213f9e668e2b7fa"
+        }
+      ]
+    },
+    {
+      "_id": "698ba56f0de7e9b36a174db0",
+      "email": "rashmichouhan707@gmail.com",
+      "mobile": "+918826974534",
+      "fcmTokens": [
+        {
+          "token": "fp2xvTxNaUJDr-1Gx_gzUq:APA91bGbzgwMJED7HRtB3Cvep8E7tUdsyf-_F1_H2yPLDmrEIqa9Dv0H1Tj6cHqdg7UHOlff0obC4jGwYvMK9dt1Ho8ruMgXAsPxc8oZMobXpFjttITvWTI",
+          "platform": "ios",
+          "updatedAt": "2026-04-28T20:44:28.343Z",
+          "_id": "69f11c2c014afcf1cbea2346"
+        },
+        {
+          "token": "dt9FLHOf502hqCTAFyyPzI:APA91bEWfOvuOSaaQSH1uVlKwmOcLlstZe-_M8iy2I_Thz0_xiFPlCBCHEaRDtzRPolgGpwXUZw-HA-x5UABqctAZmFLFQH1jZjRHE8i921JAGd0NuEKohU",
+          "platform": "ios",
+          "updatedAt": "2026-04-23T22:24:12.293Z",
+          "_id": "69ea9c0cddcf6b2fec1e9178"
+        }
+      ]
+    },
+    {
+      "_id": "698d41876659d666285eaa4a",
+      "email": "deepti0283@gmail.com",
+      "mobile": "+919817710186",
+      "fcmTokens": [
+        {
+          "token": "eBRdkhPRSV2OxKBVyCZAQB:APA91bF_EEGD5ragYm9qMwUhFxeZRtjllREmJpVB3FncXkPLpdOz_qxZ1aXBXG4W7YEyit1BfiZcR6dfzQWsD-v9itT5GaP8BQj1_ZjY7G6RYHsLwqDoI5o",
+          "platform": "android",
+          "updatedAt": "2026-06-15T06:22:45.772Z",
+          "_id": "6a2f9a357310c1b0fececb7d"
+        }
+      ]
+    },
+    {
+      "_id": "698f771064dae3d64e893781",
+      "email": "sushant.iyeo@gmail.com",
+      "mobile": "+918130474235",
+      "fcmTokens": [
+        {
+          "token": "eBQlakeEDUV-jpZYaYSUL2:APA91bHvsHuQvYFRXdmoG5BHiy-8_CQnAM985A84BneIpGxsQl2FGZTKlJNlEHQvgqWvzx1hUStNWaHxDQkA06uoiDaFsV4isaWgM16Fotu90elOqqwbgiQ",
+          "platform": "ios",
+          "updatedAt": "2026-06-22T16:58:04.273Z",
+          "_id": "6a39699c7310c1b0fed0f746"
+        },
+        {
+          "token": "dXK48wGurUh9k2K8vIuy_p:APA91bEyjMpPMrRmUozCPZ3cHsc0c0TLvW0Fe6KukH0OOd7imzWk0G1zkJ8sKHcwGAo__WVEr1UGf0DLdS5_tY03PENE52qgPd-SPZ8un3SVdrVHMas16iY",
+          "platform": "ios",
+          "updatedAt": "2026-04-24T20:10:46.063Z",
+          "_id": "69ebce46a4c315bd74453c80"
+        },
+        {
+          "token": "e8m6pPU3TUCQnxy9imvSyW:APA91bHsSyfPORnyrmEPIGVMMEPTbDEBp8nBavKmoiFbgJfe3eKz4ZcZ8bHLS5GoolHTkfRtgTdfHGIq-tIpt2w7znEJll4hkHYMrgQjLAwrxRWsyqzk0og",
+          "platform": "ios",
+          "updatedAt": "2026-04-22T08:50:10.231Z",
+          "_id": "69e88bc22043be71d3e243d6"
+        },
+        {
+          "token": "fpitS8cYwEqhqAdLAubhSH:APA91bHBTmf37w3jSQ1a2n2pknhVueu7tDLSxMlfsMgCDEE7WEvX8vBZRI76-q6zRb8FvND5w54UJccK8jywaNZ-LdscuZ9ob3V-oxbobTHpqjS_YBmvDVY",
+          "platform": "ios",
+          "updatedAt": "2026-04-19T03:52:30.175Z",
+          "_id": "69e4517e18b2822e1233f104"
+        },
+        {
+          "token": "fQU7CpsxAUhisYYSSYz85n:APA91bGgYmK_2nPhm_TmKChLvmtFc6Bgvk_R6i_I5ryiKnhQ9ZhWbZxwQbowPOaqNogU8-1IeeSqFM_SLWipmrdxsnlNnmAf2KxCOi04SKqp99P06hbXLFk",
+          "platform": "ios",
+          "updatedAt": "2026-04-12T10:56:32.126Z",
+          "_id": "69db7a60f35dd957135b85d0"
+        },
+        {
+          "token": "eKMNFwCor0NwpcOipjow0Y:APA91bH1tB8sza0PshRBiQ0FPVjXlRnMix1jk0oRfeKM7B4Y2rAJJYmVP1uhcjRX1Y7J_dlPTfWSmqM5sj1TWobUZflOoHrfFVGhZL96HjwktJ1HgbB3Sp0",
+          "platform": "ios",
+          "updatedAt": "2026-04-09T18:01:33.649Z",
+          "_id": "69d7e97d82143785da82fc62"
+        },
+        {
+          "token": "egkhqTi1e0vYpe7rahFRMz:APA91bGC4_W3By8krjQ238D3zqhI87OthdeH-qyAsPqOqyGpaUX3XNZ_kaOIm4ToDIdU5M5h6AbRn6RKkVtFqwOi1UrcXg2-uPc4iSwBjzSDQr2bCivez8A",
+          "platform": "ios",
+          "updatedAt": "2026-04-09T02:44:28.002Z",
+          "_id": "69d7128c82143785da82bd25"
+        }
+      ]
+    },
+    {
+      "_id": "698f772764dae3d64e89378c",
+      "email": "therajsushant@gmail.com",
+      "mobile": "+919777778569",
+      "fcmTokens": [
+        {
+          "token": "f0SHVExpSeSpF38c3CyQWr:APA91bERx6VbSoRIV3XaiVMOV9sbwlIWvsVG3ZB0iPyP1BP6qLx6E6wkd26TyCDEjaS7Ghtvm8-LzQrk_6YhqgwjjSrrk7trtF4PKj5m2bgogkLgm5FISzs",
+          "platform": "android",
+          "updatedAt": "2026-10-21T10:48:28.412Z",
+          "_id": "6ad8987c22c66062b36e391b"
+        }
+      ]
+    },
+    {
+      "_id": "69907e93691635586c7fd838",
+      "email": "champsunicorn@gmail.com",
+      "mobile": "+971552431339",
+      "fcmTokens": [
+        {
+          "token": "exdoJI3mTXWnGH7copRklc:APA91bGnZxvV1JzEpAMoD1YlalbeRPYH-aMjoX-rBClFv4wBTuVVQIqGaESB2Iq4SXkWi-0Is5mFUWVcHTaAHyZFuYdWvdT0GpsJxVrI68GYNcOyOtdLepM",
+          "platform": "android",
+          "updatedAt": "2026-05-13T16:00:22.119Z",
+          "_id": "6a04a0167310c1b0fec2afa8"
+        }
+      ]
+    },
+    {
+      "_id": "69beb3d3c5db87fc999a2575",
+      "email": "imsandeepupadhyay@gmail.com",
+      "mobile": "+919322866566",
+      "fcmTokens": [
+        {
+          "token": "fQ0VIvunfUz_oLrtmVVnUY:APA91bEzFM0r_nRXhASbnkvxjM8ooZzWEULr-52OqVsCq4XrxJuLUkXxcxppyLDhsNI-4zQKpnAqsjvoQW4neh9byBn6PzaqdnhPDuKlmlbArZEPOxSARCA",
+          "platform": "ios",
+          "updatedAt": "2026-05-01T06:59:53.535Z",
+          "_id": "69f44f696b4d1914e4641367"
+        }
+      ]
+    },
+    {
+      "_id": "69c13707318434d60b092e41",
+      "email": "tanyasharma2029@gmail.com",
+      "mobile": "+919650820292",
+      "fcmTokens": [
+        {
+          "token": "cPSd8p-fx0-bioEPD9D6UP:APA91bEJzsnohW7j6qCSbJgXPJyWa28rWFavn5VciLCWlXqg-_NZCzqUJiNaz2_ivSNWHA_7a_PTF_qkWWhWn4DphCxVYlkJJ5bP4Ku1T22uMBDfs4-mZs4",
+          "platform": "ios",
+          "updatedAt": "2026-04-19T10:14:28.273Z",
+          "_id": "69e4ab0405e8f89886245202"
+        }
+      ]
+    },
+    {
+      "_id": "69c19100318434d60b0939c7",
+      "email": "karunakar.rai@gmail.com",
+      "mobile": "+971554301681",
+      "fcmTokens": [
+        {
+          "token": "fOBlVO6wuk95pLgwZNpznz:APA91bE41Bun-WE3sppWiZD_d6luqdkYC5R2tmE2f8m8gOg4R8I9JzEGsqFdW-Zizmvv7R9tutjzg_CeSN5GzfUQbRO6xGabUf6_iIzxp5YwQ2mR_6LoOHs",
+          "platform": "ios",
+          "updatedAt": "2026-07-05T13:48:58.823Z",
+          "_id": "6a4a60ca601c376ce633b7c3"
+        }
+      ]
+    },
+    {
+      "_id": "69d0c4434f7e14d8bf07aa01",
+      "email": "arorakrrish3@gmail.com",
+      "mobile": "+917398542428",
+      "fcmTokens": [
+        {
+          "token": "fIJjhJNxSksVjgZYm25Llo:APA91bFaE0QdO5W3kLZZiUzKWgtRGAsKANSC7bcF75RRmQ-c_Sk8rvSZwKmm6hRtSfSk6FpMZs_cfD2fqip-Q0bv3_RJe4Ks2q8jYk_0lkgjimhoK_e0y6M",
+          "platform": "ios",
+          "updatedAt": "2026-04-07T14:53:01.978Z",
+          "_id": "69d51a4d6c411098058235d6"
+        }
+      ]
+    },
+    {
+      "_id": "69d6853c82143785da829cb7",
+      "email": "mayanktiwari4517@gmail.com",
+      "mobile": "+917252813010",
+      "fcmTokens": [
+        {
+          "token": "dSfiPFwrG0X4nObc_RHCar:APA91bEApARXWfqNscryE_wki25J3rK1iLHslj9FNSE2cTn1f3I6rrq62VDkcJSlTivuWrF86SklS1WynwZUy-PcNvdSHW8dGlw8xCioX8Ld93yH82N23bQ",
+          "platform": "ios",
+          "updatedAt": "2026-10-16T16:11:29.794Z",
+          "_id": "6ad24cb1208955f175b5b204"
+        }
+      ]
+    },
+    {
+      "_id": "69dc0d5ef35dd957135ba960",
+      "email": "mohitasati16@gmail.com",
+      "mobile": "+918077923970",
+      "fcmTokens": [
+        {
+          "token": "exZn7cKioUIYkrV3FcbvmA:APA91bEQ5GEppjhdMu1dSY2APYaQdE5XzoH9wet7hVPfy3UO2ePzzAXzaQAcfPgQfpE9eYFrgLBpH4SpnsastvMm5XPtJEPV7_pv7Q9ckuySe6J6-ybkeE0",
+          "platform": "ios",
+          "updatedAt": "2026-05-09T03:05:33.977Z",
+          "_id": "69fea47d7310c1b0fec15946"
+        }
+      ]
+    },
+    {
+      "_id": "69e1f4d0f35dd957135d6490",
+      "email": "padmanabha.astrovastu@gmail.com",
+      "mobile": "+919310782784",
+      "fcmTokens": [
+        {
+          "token": "dLZ4DXPAPkVluwLRbhrfPH:APA91bGnZ5NQsOdxXK651EzD8YMo1f74dx4w2qNIBJK4F1wGD_tF8mxxgZ-uJFH3DAKs58bZrQHOPoEGjV20hW-_GhiuEqa0eKlZ4ualB6TUDg3yjK2CWnY",
+          "platform": "ios",
+          "updatedAt": "2026-04-22T16:19:33.228Z",
+          "_id": "69e8f5152043be71d3e259b6"
+        }
+      ]
+    },
+    {
+      "_id": "69e7c9b3d79799c00ed2ce99",
+      "email": "aabha.prinsusetu@gmail.com",
+      "mobile": "+919905031851",
+      "fcmTokens": [
+        {
+          "token": "fJUJ_x8DQruyjYM2XPvzPn:APA91bFZ1gWN15X0eWluO9j00YjqirgnF4oG8vz-nlglNsVf1k15PxQEQRMr6uBy3rm-nnCDLhUAC2laXimlf8QyJAPcwj9ZN26d711V74F3gcnip_DGfgQ",
+          "platform": "android",
+          "updatedAt": "2026-04-27T11:34:37.428Z",
+          "_id": "69ef49cd014afcf1cbe99d22"
+        }
+      ]
+    },
+    {
+      "_id": "6a17ec8e7310c1b0fec62ead",
+      "email": "meenakshihari1972@gmail.com",
+      "mobile": "+919150633360",
+      "fcmTokens": [
+        {
+          "token": "cfPJzWgntUq_vBIEwel2La:APA91bHjsxRMwEBEd0oNUgKWE6_7tpjpUN5ISGTrazf6iXLNWRkol44kk-btq0hGcsFwodgnmK2ZAPOJk_6qdON3ftRSGPQLJAvhFa5TMtAWLayoIwVRdhs",
+          "platform": "ios",
+          "updatedAt": "2026-06-05T07:14:02.771Z",
+          "_id": "6a22773a7310c1b0feca0e1c"
+        },
+        {
+          "token": "f_ygKyv-jkVKhHRD7xyRmQ:APA91bGuZJ6uIacO6Zh27hsgUqjW9oTHTGXywni0gUHIKec882HSz7wfAPtBnNIICNrrxsxYsk6JTBvNXZsH-U4zfdgvKj4U0WWvBIPkoj9qZSYQHe1yuok",
+          "platform": "ios",
+          "updatedAt": "2026-05-30T13:09:27.204Z",
+          "_id": "6a1ae1877310c1b0fec74c5b"
+        },
+        {
+          "token": "djfMewqLEkJBpUzhhDHFwD:APA91bE-vKLi5yK3aGJwJX52Tv2OT4BAVHJfPx_xUYf5a3lSlnViR4y3pHBD5XIXCIv2ppmG9QeblcqAGXCT5eiWf357YUhwkW7rNZBdUIsZT7dH2DE4-Tw",
+          "platform": "ios",
+          "updatedAt": "2026-05-30T01:16:45.357Z",
+          "_id": "6a1a3a7d7310c1b0fec70186"
+        },
+        {
+          "token": "fr8BhOcS-EurnBxu3Hkd46:APA91bGCpxQmvB7ZEdJdX9Org3kqC4IPN4_pZTg7y82KKDCFbArXvPQUJ2EU9JKIWa4KwpiEqK0L1nfgIQPkkB0UpcqnFpdPGgMV6EiWTUKQI8_e3IYHBSM",
+          "platform": "ios",
+          "updatedAt": "2026-05-29T14:57:00.062Z",
+          "_id": "6a19a93c7310c1b0fec6d21e"
+        },
+        {
+          "token": "fYeM24SuzEILvXLBuj7t7r:APA91bEO-JpfzqimhBnAwozXP1g0AdE0XSEU5_N0uogQm-S8308QkYqmnnxDeK2cB5NOgjGI9F1DXll7YsI4RXRzCFL2EW63bWoeekIghc6pBNg6CVg7e48",
+          "platform": "ios",
+          "updatedAt": "2026-05-28T11:31:59.702Z",
+          "_id": "6a1827af7310c1b0fec64de8"
+        }
+      ]
+    },
+    {
+      "_id": "6a1f57967310c1b0fec8ee14",
+      "email": "zyjfw4dsgt@privaterelay.appleid.com",
+      "mobile": "+447585959739",
+      "fcmTokens": [
+        {
+          "token": "fzdPkww6P0AfjpJzo-OXs4:APA91bGyEhkP7mYfwntxIRDZ7fzW5s2a8jkZk-JT3z9VcRvJyEtLJPwRc_ZPw-L-UdE4AIXSkDVOvBhyqg4hohYpdgdtGeNj72gyQlTFxpQ3xbIwhrUZ1Ek",
+          "platform": "ios",
+          "updatedAt": "2026-06-02T22:29:40.485Z",
+          "_id": "6a1f59547310c1b0fec8f088"
+        }
+      ]
+    },
+    {
+      "_id": "6a7c2e91097703dcb8ee2fda",
+      "email": "rajkumarchaurasiya342@gmail.com",
+      "mobile": "+918726525782",
+      "fcmTokens": [
+        {
+          "token": "cxI0PpwVR_G3rwL1ruFDWL:APA91bGY7DKBxHCR1aVGHcKn10g9kO5SuXkMHtvWDbV-nesVO0YOGzNPeryfT27GUXqhkMP36lf2d1lOJAI74bgkDaGjrfDT1WxSGkR6Ofgjnl3wdGfhh0w",
+          "platform": "android",
+          "updatedAt": "2026-08-13T12:08:25.634Z",
+          "_id": "6a7db3b91e278bd91bfe9986"
+        }
+      ]
+    },
+    {
+      "_id": "6ac55652208955f175b3fd1f",
+      "email": "bp2wvtk2m9@privaterelay.appleid.com",
+      "mobile": "+918143539265",
+      "fcmTokens": [
+        {
+          "token": "fPx-DCWPTUv3mHxRxJ2uSD:APA91bEpnH4faD4HlYn8YdpPZXHsV23HuCxlQIkIirwTXwvNOExGfgCWauZX1cWSDv8ZmSmrvLkKNar_GCtBhif97Ev2TROQAmu9lI9fZ_A5_A3c9Lsihhg",
+          "platform": "ios",
+          "updatedAt": "2026-10-20T11:54:11.545Z",
+          "_id": "6ad75663208955f175b64156"
+        }
+      ]
+    },
+    {
+      "_id": "6ace82033755885403b287e5",
+      "email": "devapp992@gmail.com",
+      "mobile": "+919918309983",
+      "fcmTokens": [
+        {
+          "token": "fjLTJDQnTpaPwdA0wLwQnM:APA91bGMnXJw5niLMxA7k7S0rIOyHGugE7xd1Z05J5CiZ5amC82pPoWEfPlHgZpg3GvMzvb6K4zzPWxygSF6w9LvAdR4tkAzQaF3xOEvo-mwCjy6VsdoySM",
+          "platform": "android",
+          "updatedAt": "2026-11-01T17:19:58.192Z",
+          "_id": "6ae774be9b9b1792fb078cdc"
+        }
+      ]
+    },
+    {
+      "_id": "6adb4531208955f175b6b2de",
+      "email": "thesonyjoseph@gmail.com",
+      "mobile": "+447300793957",
+      "fcmTokens": [
+        {
+          "token": "fyGBhhDBSe-N86UXa35xTp:APA91bHsvAUG5dCOpzZMUNBFmN-3WHRJr2g7187u1yCmihfcNv7AXL9jDmrsTEVVTrvlOv0_J44PE_SsSgseaiXejejiAs2T36RXPhlVlH45ZLlaKv1LOjo",
+          "platform": "android",
+          "updatedAt": "2026-11-01T01:42:10.796Z",
+          "_id": "6ae698f299bb2da42e9628b3"
+        }
+      ]
+    },
+    {
+      "_id": "6ae6f43ed249aeaf6519e7b7",
+      "email": "mobile_918124550655@temp.com",
+      "mobile": "+918124550655",
+      "fcmTokens": [
+        {
+          "token": "fbyPiNrqTM6uFu5kGEfMOj:APA91bGcoEQzxvuPzGAIvV-3e6r1n8bosY6mD_8HGdMWl5Jlqxu5W1YiV6XZvGbTuh0AaOYMDuBnotbiDyzxZwYqTIZQe7eWxh4ELzaOPdW99v-6gGPhqAw",
+          "platform": "android",
+          "updatedAt": "2026-11-01T08:23:57.648Z",
+          "_id": "6ae6f71d99bb2da42e963627"
+        }
+      ]
+    }
+  ]
+}

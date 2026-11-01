@@ -97,7 +97,8 @@ const sendCampaign = async (campaign) => {
       pushMetrics = {
         sentTokens: pushResult?.sent || 0,
         failedTokens: pushResult?.failed || 0,
-        totalTokens: (pushResult?.sent || 0) + (pushResult?.failed || 0)
+        totalTokens: (pushResult?.sent || 0) + (pushResult?.failed || 0),
+        thirdPartyAuthErrors: pushResult?.thirdPartyAuthErrors || 0
       };
 
       if (pushResult?.invalidTokens?.length) {
@@ -118,18 +119,24 @@ const sendCampaign = async (campaign) => {
   }
 
   const allTokensFailed = pushMetrics.totalTokens > 0 && pushMetrics.sentTokens === 0;
+  const hasAuthErrors = (pushMetrics.thirdPartyAuthErrors || 0) > 0;
   let warning = '';
   if (fcmTokens.length === 0) warning = 'Saved in the app inbox. None of the recipients has a push-enabled device yet.';
   else if (pushSkipped) warning = 'Saved in the app inbox, but push was not sent: Firebase is not configured on the server.';
+  else if (hasAuthErrors && pushMetrics.sentTokens === 0) warning = `Push failed: Firebase service account credentials are invalid (third-party-auth-error). Regenerate the service account key in Firebase Console and update FIREBASE_SERVICE_ACCOUNT_KEY in .env.`;
+  else if (hasAuthErrors) warning = `${pushMetrics.thirdPartyAuthErrors} token(s) failed due to invalid Firebase credentials. Fix FIREBASE_SERVICE_ACCOUNT_KEY to reach all devices.`;
   const campaignUpdate = {
     status: allTokensFailed ? 'failed' : 'sent',
     sentAt: now,
     totalRecipients: userIds.length,
     totalTokens: pushMetrics.totalTokens,
-    // store token delivery metrics
     sentCount: pushMetrics.sentTokens,
     failedCount: pushMetrics.failedTokens,
-    errorMessage: allTokensFailed ? 'All device tokens failed to receive push' : warning
+    errorMessage: allTokensFailed
+      ? (hasAuthErrors
+          ? 'Firebase credentials invalid (third-party-auth-error). Fix FIREBASE_SERVICE_ACCOUNT_KEY in .env.'
+          : 'All device tokens failed to receive push')
+      : warning
   };
 
   await ClientNotificationCampaign.findByIdAndUpdate(campaign._id, {

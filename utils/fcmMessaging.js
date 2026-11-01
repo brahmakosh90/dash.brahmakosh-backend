@@ -55,6 +55,11 @@ export async function sendFcmToTokens(tokens, { title, body, data = {} }) {
     'messaging/registration-token-not-registered'
   ]);
 
+  // third-party-auth-error means Firebase credentials are wrong on the server.
+  // The tokens themselves are valid — do NOT remove them from DB.
+  // Fix: regenerate service account key in Firebase Console and update .env.
+  let thirdPartyAuthErrorCount = 0;
+
   const isRetryableError = (err) => {
     const code = err?.code || '';
     const msg = err?.message || '';
@@ -100,7 +105,19 @@ export async function sendFcmToTokens(tokens, { title, body, data = {} }) {
             const token = chunk[idx];
             if (!r.success) {
               const code = r.error?.code;
-              console.warn('[FCM] Token send failed:', token?.slice(0, 20) + '...', code || r.error?.message);
+              if (code === 'messaging/third-party-auth-error') {
+                thirdPartyAuthErrorCount++;
+                // Only log once per batch to avoid log spam
+                if (thirdPartyAuthErrorCount === 1) {
+                  console.error(
+                    '[FCM] third-party-auth-error: Firebase service account credentials are invalid or expired.\n' +
+                    '  Fix: Firebase Console → Project Settings → Service Accounts → Generate new private key\n' +
+                    '  Then update FIREBASE_SERVICE_ACCOUNT_KEY in .env and restart the server.'
+                  );
+                }
+              } else {
+                console.warn('[FCM] Token send failed:', token?.slice(0, 20) + '...', code || r.error?.message);
+              }
               if (code && INVALID_CODES.has(code)) {
                 invalidTokens.push(token);
               }
@@ -123,5 +140,12 @@ export async function sendFcmToTokens(tokens, { title, body, data = {} }) {
     }
   }
 
-  return { sent, failed, skipped: false, invalidTokens: [...new Set(invalidTokens)] };
+  if (thirdPartyAuthErrorCount > 0) {
+    console.error(
+      `[FCM] ${thirdPartyAuthErrorCount} token(s) failed with third-party-auth-error. ` +
+      'Tokens are preserved in DB. Fix Firebase credentials to resolve.'
+    );
+  }
+
+  return { sent, failed, skipped: false, invalidTokens: [...new Set(invalidTokens)], thirdPartyAuthErrors: thirdPartyAuthErrorCount };
 }
