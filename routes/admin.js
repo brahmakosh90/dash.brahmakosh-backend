@@ -700,6 +700,19 @@ router.get('/health', async (req, res) => {
       ? { adminId: { $exists: true } }
       : { adminId: req.user._id };
 
+    // Round-trip time to MongoDB (median of 3 pings). Every query pays this once, so if it is high
+    // (e.g. 200ms+) the database is far from this server and nothing in the code can make the APIs fast.
+    let dbPingMs = null;
+    if (dbState === 1) {
+      const samples = [];
+      for (let i = 0; i < 3; i++) {
+        const t0 = Date.now();
+        try { await mongoose.connection.db.admin().ping(); samples.push(Date.now() - t0); } catch { break; }
+      }
+      samples.sort((a, b) => a - b);
+      dbPingMs = samples.length ? samples[Math.floor(samples.length / 2)] : null;
+    }
+
     const allClients = await Client.find(clientQuery).select('_id').lean();
     const clientIds = allClients.map(c => c._id);
 
@@ -721,7 +734,7 @@ router.get('/health', async (req, res) => {
       success: true,
       data: {
         server: { status: 'Operational', uptime, nodeVersion: process.version, env: process.env.NODE_ENV || 'production' },
-        database: { status: dbStatus, healthy: dbState === 1, host: mongoose.connection.host || 'Atlas' },
+        database: { status: dbStatus, healthy: dbState === 1, host: mongoose.connection.host || 'Atlas', pingMs: dbPingMs },
         memory: { heapUsed: toMB(mem.heapUsed), heapTotal: toMB(mem.heapTotal), rss: toMB(mem.rss), unit: 'MB' },
         services,
         stats: { totalClients, activeClients, totalUsers, activeUsers }

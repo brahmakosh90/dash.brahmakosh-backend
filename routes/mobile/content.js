@@ -35,15 +35,24 @@ router.get('/spiritual-checkin', authenticateToken, async (req, res) => {
     const userId = req.user._id || req.user.userId;
     const clientId = req.user.clientId || req.user.tokenClientId;
     
-    // Get spiritual activities for this client
-    let activities = [];
-    if (clientId) {
-      activities = await SpiritualActivity.find({
-        clientId: clientId,
-        isActive: true,
-        isDeleted: false
-      }).sort({ createdAt: -1 });
-    }
+    // Models for the user's stats (loaded once, before the reads below)
+    const User = (await import('../../models/User.js')).default;
+    const KarmaPointsTransaction = (await import('../../models/KarmaPointsTransaction.js')).default;
+    const RewardRedemption = (await import('../../models/RewardRedemption.js')).default;
+
+    // All of these reads are independent: start them together. Run one after another, each cost a full round
+    // trip to the database (this endpoint did 5-6 in a row, which is why it was the slowest API).
+    const [clientActivities, sessions, currentUser, bonusTransactions, redemptions] = await Promise.all([
+      clientId
+        ? SpiritualActivity.find({ clientId: clientId, isActive: true, isDeleted: false }).sort({ createdAt: -1 })
+        : Promise.resolve([]),
+      SpiritualSession.find({ userId }).sort({ createdAt: -1 }).lean(),
+      User.findById(userId).select('karmaPoints').lean(),
+      KarmaPointsTransaction.find({ userId }).select('amount').lean(),
+      RewardRedemption.find({ userId, status: 'completed' }).select('karmaPointsSpent').lean()
+    ]);
+
+    let activities = clientActivities;
     
     // If no client-specific activities, get global activities
     if (activities.length === 0) {
@@ -82,13 +91,6 @@ router.get('/spiritual-checkin', authenticateToken, async (req, res) => {
       })
     );
     
-    // Get user spiritual stats
-    const sessions = await SpiritualSession.find({ userId }).sort({ createdAt: -1 });
-    
-    // Get User model for karmaPoints
-    const User = (await import('../../models/User.js')).default;
-    const currentUser = await User.findById(userId).select('karmaPoints');
-    
     // Use User.karmaPoints as source of truth (includes activities + sankalp + bonus - spent)
     const totalKarmaPoints = currentUser?.karmaPoints || 0;
     
@@ -96,14 +98,8 @@ router.get('/spiritual-checkin', authenticateToken, async (req, res) => {
     const totalSessions = sessions.length;
     const totalKarmaFromActivities = sessions.reduce((sum, session) => sum + (session.karmaPoints || 0), 0);
     
-    // Get bonus and spent points
-    const KarmaPointsTransaction = (await import('../../models/KarmaPointsTransaction.js')).default;
-    const RewardRedemption = (await import('../../models/RewardRedemption.js')).default;
-    
-    const bonusTransactions = await KarmaPointsTransaction.find({ userId });
     const totalBonusPoints = bonusTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
     
-    const redemptions = await RewardRedemption.find({ userId, status: 'completed' });
     const totalSpentPoints = redemptions.reduce((sum, r) => sum + (r.karmaPointsSpent || 0), 0);
     const completedSessions = sessions.filter(s => {
       const sessionStatus = s.status || (s.completionPercentage >= 100 ? 'completed' : 
