@@ -641,10 +641,10 @@ export const handleVoiceAgentWebSocket = (wss) => {
           if (isActive && !firstMessageSent && chat.messages.length === 0) {
             firstMessageSent = true;
             try {
-              const userDoc = await User.findById(userId).select('profile.name').lean();
+              const userDoc = await User.findById(userId).select('profile.name preferredLanguage').lean();
               const greeting = buildGreeting({
                 fullName:  userDoc?.profile?.name,
-                language:  data.language,
+                language:  data.language || userDoc?.preferredLanguage,
                 voiceName: voiceConfig?.name || requestedVoice,
                 agentName,
                 gender:    voiceConfig?.gender,

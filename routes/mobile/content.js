@@ -3,11 +3,14 @@ import Testimonial from '../../models/Testimonial.js';
 import FounderMessage from '../../models/FounderMessage.js';
 import BrandAsset from '../../models/BrandAsset.js';
 import Meditation from '../../models/Meditation.js';
+import Chanting from '../../models/Chanting.js';
 import SpiritualActivity from '../../models/SpiritualActivity.js';
 import SpiritualSession from '../../models/SpiritualSession.js';
 import { authenticateToken } from '../../middleware/auth.js';
 import mongoose from 'mongoose';
 import { getPresignedUrl, extractS3KeyFromUrl } from '../../utils/storage.js';
+import { withSignedMedia, signKeys, MEDIA_URL_TTL_SECONDS } from '../../utils/mediaUrls.js';
+import { localizeMantraText } from '../../utils/mantraText.js';
 
 const router = express.Router();
 
@@ -557,99 +560,201 @@ router.get('/brand-assets/:id', async (req, res) => {
 });
 
 // ============================================
+// SHARED HELPERS (meditations / chantings)
+// ============================================
+
+const DEFAULT_CATEGORY = 'General';
+
+const resolveLang = (req) => (String(req.query.lang ?? '').toLowerCase().startsWith('en') ? 'en' : 'hi');
+
+// Validates the public `clientId` query param; returns it, or sends the 400 and returns null.
+const requireClientId = (req, res) => {
+  const { clientId } = req.query;
+  if (!clientId) {
+    res.status(400).json({ success: false, message: 'clientId query parameter is required' });
+    return null;
+  }
+  if (!mongoose.Types.ObjectId.isValid(clientId)) {
+    res.status(400).json({ success: false, message: 'Invalid clientId format' });
+    return null;
+  }
+  return clientId;
+};
+
+// Blank category used to reach the app as '' and render as an empty section.
+const toMobileMeditation = async (doc) => {
+  const obj = await withSignedMedia(doc, ['video', 'image', 'audio']);
+  obj.category = (obj.category || '').trim() || DEFAULT_CATEGORY;
+  // `mediaUrl` = the one URL a player should use: audio track first, then video
+  obj.mediaUrl = obj.audioUrl || obj.videoUrl || null;
+  return obj;
+};
+
+const toMobileChanting = async (doc, lang) => {
+  const obj = await withSignedMedia(doc, ['video', 'image', 'audio']);
+  obj.mantra = localizeMantraText(obj.mantraText, lang);
+  obj.mediaUrl = obj.audioUrl || obj.videoUrl || null;
+  obj.language = lang;
+  return obj;
+};
+
+// ============================================
+// APP-WIDE AUDIO - Mobile Endpoints
+// ============================================
+
+/**
+ * GET /api/mobile/content/audio-config
+ * One place for the app's audio playback settings so every screen (meditation, chanting,
+ * courses) behaves the same.
+ */
+router.get('/audio-config', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      urlTtlSeconds: MEDIA_URL_TTL_SECONDS,   // re-fetch the item (or call /media/resolve) before this elapses
+      refreshBeforeSeconds: 300,
+      defaultVolume: 0.8,
+      preload: 'metadata',
+      supportedFormats: ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/wav'],
+      resolveEndpoint: '/api/mobile/content/media/resolve'
+    }
+  });
+});
+
+/**
+ * POST /api/mobile/content/media/resolve   body: { keys: string[] }  (max 25)
+ * Re-signs storage keys so a long-running player can refresh an expiring audio URL.
+ */
+router.post('/media/resolve', authenticateToken, async (req, res) => {
+  try {
+    const keys = Array.isArray(req.body?.keys) ? req.body.keys : [];
+    if (keys.length === 0 || keys.length > 25) {
+      return res.status(400).json({ success: false, message: 'Provide 1-25 keys' });
+    }
+    res.json({ success: true, data: await signKeys(keys), expiresIn: MEDIA_URL_TTL_SECONDS });
+  } catch (error) {
+    console.error('Error resolving media keys:', error);
+    res.status(500).json({ success: false, message: 'Failed to resolve media' });
+  }
+});
+
+// ============================================
 // MEDITATIONS - Mobile Endpoints
 // ============================================
 
 /**
- * GET /api/mobile/meditations?clientId=<clientId>
- * Get all meditations for a specific client (for mobile app)
+ * GET /api/mobile/content/meditations?clientId=<clientId>[&category=<name>]
+ * Meditations with signed audio/video/image URLs. Blank categories are served as "General".
  */
 router.get('/meditations', async (req, res) => {
   try {
-    const { clientId } = req.query;
+    const clientId = requireClientId(req, res);
+    if (!clientId) return;
 
-    if (!clientId) {
-      return res.status(400).json({
-        success: false,
-        message: 'clientId query parameter is required'
-      });
-    }
+    const meditations = await Meditation.find({ clientId, isActive: true }).sort({ createdAt: -1 });
+    let data = await Promise.all(meditations.map(toMobileMeditation));
 
-    if (!mongoose.Types.ObjectId.isValid(clientId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid clientId format'
-      });
-    }
+    const wanted = String(req.query.category ?? '').trim().toLowerCase();
+    if (wanted) data = data.filter((m) => m.category.toLowerCase() === wanted);
 
-    const meditations = await Meditation.find({
-      clientId: clientId,
-      isActive: true
-    }).sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      data: meditations,
-      count: meditations.length,
-      clientId: clientId
-    });
+    res.json({ success: true, data, count: data.length, clientId });
   } catch (error) {
     console.error('Error fetching meditations:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch meditations',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch meditations', error: error.message });
   }
 });
 
 /**
- * GET /api/mobile/meditations/:id?clientId=<clientId>
- * Get single meditation by ID for a specific client
+ * GET /api/mobile/content/meditations/categories?clientId=<clientId>
+ * Categories that actually contain active meditations, with counts (never an empty/blank name).
+ */
+router.get('/meditations/categories', async (req, res) => {
+  try {
+    const clientId = requireClientId(req, res);
+    if (!clientId) return;
+
+    const rows = await Meditation.aggregate([
+      { $match: { clientId: new mongoose.Types.ObjectId(clientId), isActive: true } },
+      { $group: { _id: { $cond: [{ $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ['$category', ''] } } } }, 0] }, { $trim: { input: '$category' } }, DEFAULT_CATEGORY] }, count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } }
+    ]);
+
+    res.json({ success: true, data: rows.map((r) => ({ name: r._id, count: r.count })), count: rows.length });
+  } catch (error) {
+    console.error('Error fetching meditation categories:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch meditation categories', error: error.message });
+  }
+});
+
+/**
+ * GET /api/mobile/content/meditations/:id?clientId=<clientId>
  */
 router.get('/meditations/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { clientId } = req.query;
+    const clientId = requireClientId(req, res);
+    if (!clientId) return;
 
-    if (!clientId) {
-      return res.status(400).json({
-        success: false,
-        message: 'clientId query parameter is required'
-      });
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid meditation id' });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(clientId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid clientId format'
-      });
-    }
-
-    const meditation = await Meditation.findOne({
-      _id: id,
-      clientId: clientId,
-      isActive: true
-    });
-
+    const meditation = await Meditation.findOne({ _id: req.params.id, clientId, isActive: true });
     if (!meditation) {
-      return res.status(404).json({
-        success: false,
-        message: 'Meditation not found'
-      });
+      return res.status(404).json({ success: false, message: 'Meditation not found' });
     }
 
-    res.json({
-      success: true,
-      data: meditation
-    });
+    res.json({ success: true, data: await toMobileMeditation(meditation) });
   } catch (error) {
     console.error('Error fetching meditation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch meditation',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch meditation', error: error.message });
+  }
+});
+
+// ============================================
+// CHANTINGS - Mobile Endpoints
+// ============================================
+
+/**
+ * GET /api/mobile/content/chantings?clientId=<clientId>[&lang=hi|en]
+ * Chantings with the mantra text in the requested language plus signed audio/video/image URLs.
+ */
+router.get('/chantings', async (req, res) => {
+  try {
+    const clientId = requireClientId(req, res);
+    if (!clientId) return;
+    const lang = resolveLang(req);
+
+    const chantings = await Chanting.find({ clientId, isActive: true }).sort({ createdAt: -1 });
+    const data = await Promise.all(chantings.map((c) => toMobileChanting(c, lang)));
+
+    res.json({ success: true, data, count: data.length, language: lang });
+  } catch (error) {
+    console.error('Error fetching chantings:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch chantings', error: error.message });
+  }
+});
+
+/**
+ * GET /api/mobile/content/chantings/:id?clientId=<clientId>[&lang=hi|en]
+ */
+router.get('/chantings/:id', async (req, res) => {
+  try {
+    const clientId = requireClientId(req, res);
+    if (!clientId) return;
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid chanting id' });
+    }
+
+    const chanting = await Chanting.findOne({ _id: req.params.id, clientId, isActive: true });
+    if (!chanting) {
+      return res.status(404).json({ success: false, message: 'Chanting not found' });
+    }
+
+    res.json({ success: true, data: await toMobileChanting(chanting, resolveLang(req)) });
+  } catch (error) {
+    console.error('Error fetching chanting:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch chanting', error: error.message });
   }
 });
 

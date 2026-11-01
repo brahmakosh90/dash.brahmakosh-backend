@@ -24,6 +24,21 @@ const meditationSchema = new mongoose.Schema({
     trim: true
     // S3 object key for generating presigned URLs
   },
+  audioUrl: {
+    type: String,
+    trim: true
+  },
+  audioKey: {
+    type: String,
+    trim: true
+    // Storage key of the meditation music/guidance track (signed at read time)
+  },
+  // Group shown in the app (e.g. "Guided Meditation", "Sleep"). Blank is served as "General".
+  category: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   imageUrl: {
     type: String,
     trim: true

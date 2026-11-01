@@ -4,6 +4,7 @@ import Chanting from '../models/Chanting.js';
 import Client from '../models/Client.js';
 import { authenticate } from '../middleware/auth.js';
 import { deleteFile, generateUploadUrl, getPresignedUrl, extractS3KeyFromUrl } from '../utils/storage.js';
+import { sanitizeMantraText } from '../utils/mantraText.js';
 
 const router = express.Router();
 
@@ -67,14 +68,14 @@ router.post('/upload-url', authenticate, async (req, res) => {
       });
     }
     
-    if (!fileType || (fileType !== 'video' && fileType !== 'image')) {
+    if (!['video', 'image', 'audio'].includes(fileType)) {
       return res.status(400).json({
         success: false,
-        message: 'fileType must be either "video" or "image"'
+        message: 'fileType must be "video", "image" or "audio"'
       });
     }
     
-    const folder = fileType === 'video' ? 'chantings/videos' : 'chantings/images';
+    const folder = fileType === 'video' ? 'chantings/videos' : fileType === 'audio' ? 'chantings/audio' : 'chantings/images';
     const { uploadUrl, fileUrl, key } = await generateUploadUrl(fileName, contentType, folder);
     
     res.json({
@@ -229,7 +230,7 @@ router.post('/direct', authenticate, async (req, res) => {
     console.log('User:', req.user._id, 'Role:', req.user.role);
     console.log('Request body:', req.body);
     
-    const { name, description, malaCount, videoUrl, imageUrl, link, duration, videoKey: vKey, imageKey: iKey } = req.body;
+    const { name, description, malaCount, videoUrl, imageUrl, link, duration, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, mantraText } = req.body;
     
     let clientId;
     try {
@@ -280,7 +281,10 @@ router.post('/direct', authenticate, async (req, res) => {
       imageUrl: imageUrl || undefined,
       imageKey: iKey || (imageUrl ? extractS3KeyFromUrl(imageUrl) : undefined),
       link: link ? link.trim() : undefined,
-      duration: duration || undefined
+      duration: duration || undefined,
+      audioUrl: audioUrl || undefined,
+      audioKey: aKey || (audioUrl ? extractS3KeyFromUrl(audioUrl) : undefined),
+      ...(mantraText !== undefined && { mantraText: sanitizeMantraText(mantraText) })
     };
     
     console.log('Files:', { video: !!videoUrl, image: !!imageUrl });
@@ -312,7 +316,7 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     console.log('Chanting ID:', req.params.id);
     console.log('Request body:', req.body);
     
-    const { name, description, malaCount, videoUrl, imageUrl, link, duration, videoKey: vKey, imageKey: iKey } = req.body;
+    const { name, description, malaCount, videoUrl, imageUrl, link, duration, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, mantraText } = req.body;
     
     let clientId;
     try {
@@ -342,6 +346,11 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     if (description !== undefined) chanting.description = description.trim();
     if (link !== undefined) chanting.link = link ? link.trim() : '';
     if (duration !== undefined) chanting.duration = duration;
+    if (mantraText !== undefined) chanting.mantraText = sanitizeMantraText(mantraText);
+    if (audioUrl || aKey) {
+      chanting.audioUrl = audioUrl || null;
+      chanting.audioKey = aKey || (audioUrl ? extractS3KeyFromUrl(audioUrl) : null);
+    }
     
     // Update malaCount if provided (will trigger totalCount recalculation)
     if (malaCount !== undefined) {

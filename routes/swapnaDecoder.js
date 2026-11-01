@@ -2,8 +2,67 @@ import express from 'express';
 import SwapnaDecoder from '../models/SwapnaDecoder.js';
 import { getPresignedUrl, generateUploadUrl } from '../utils/storage.js';
 import { authenticateToken } from '../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+import {
+  interpretDream,
+  normalizeInterpretLanguage,
+  MAX_DREAM_LENGTH,
+  MAX_QUESTION_LENGTH,
+  MAX_FOLLOWUP_TURNS,
+} from '../services/swapnaInterpretService.js';
 
 const router = express.Router();
+
+// AI calls cost money: cap per logged-in user (runs after authenticateToken, so req.user exists)
+const interpretLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.user?._id),
+  validate: { keyGeneratorIpFallback: false },
+  message: { success: false, error: 'RATE_LIMITED', message: 'Too many requests. Please wait a minute and try again.' },
+});
+
+// POST AI dream interpretation + follow-ups (PROTECTED, app users only) - MUST be before /:id routes
+// Body: { dream, language?: 'hi'|'en', question?, history?: [{question, answer}] }
+router.post('/interpret', authenticateToken, interpretLimiter, async (req, res) => {
+  try {
+    if (req.decodedRole !== 'user') {
+      return res.status(403).json({ success: false, error: 'INVALID_ROLE', message: 'Only app users can decode dreams.' });
+    }
+
+    const dream = String(req.body?.dream ?? '').trim();
+    const question = String(req.body?.question ?? '').trim();
+
+    if (dream.length < 10) {
+      return res.status(400).json({ success: false, error: 'DREAM_TOO_SHORT', message: 'Please describe your dream in a little more detail.' });
+    }
+    if (dream.length > MAX_DREAM_LENGTH || question.length > MAX_QUESTION_LENGTH) {
+      return res.status(400).json({ success: false, error: 'INPUT_TOO_LONG', message: 'Your text is too long. Please shorten it.' });
+    }
+
+    const history = (Array.isArray(req.body?.history) ? req.body.history : [])
+      .slice(-MAX_FOLLOWUP_TURNS)
+      .map((t) => ({ question: String(t?.question ?? '').slice(0, MAX_QUESTION_LENGTH), answer: String(t?.answer ?? '').slice(0, 800) }))
+      .filter((t) => t.question && t.answer);
+
+    const clientId = req.user?.clientId?.clientId || req.user?.tokenClientId || undefined;
+
+    const data = await interpretDream({
+      dream,
+      language: normalizeInterpretLanguage(req.body?.language),
+      question: question || undefined,
+      history,
+      clientId,
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error interpreting dream:', error);
+    res.status(500).json({ success: false, error: 'INTERPRET_FAILED', message: 'Could not decode your dream right now. Please try again.' });
+  }
+});
 
 // GET search suggestions - MUST be before /:id (PUBLIC)
 router.get('/search/suggestions', async (req, res) => {

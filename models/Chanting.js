@@ -32,6 +32,21 @@ const chantingSchema = new mongoose.Schema({
     // Example: 2 malas = 216 chants
   },
   
+  // Mantra text per script/language, served by language preference (falls back to Sanskrit)
+  mantraText: {
+    sanskrit: { type: String, trim: true, default: '' },
+    hindi: { type: String, trim: true, default: '' },
+    transliteration: { type: String, trim: true, default: '' },
+    meaning: {
+      en: { type: String, trim: true, default: '' },
+      hi: { type: String, trim: true, default: '' }
+    }
+  },
+
+  // Chanting audio (recitation to follow along)
+  audioUrl: { type: String, trim: true },
+  audioKey: { type: String, trim: true },
+
   // Media Files (S3 URLs)
   videoUrl: {
     type: String,

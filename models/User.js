@@ -64,6 +64,12 @@ const userSchema = new mongoose.Schema({
     }
   },
   profileImage: String,
+  // App-wide content/greeting language, set once and used by every localized endpoint
+  preferredLanguage: {
+    type: String,
+    enum: ['hi', 'en'],
+    default: 'hi'
+  },
   mobile: {
     type: String,
     sparse: true

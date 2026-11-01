@@ -5,6 +5,7 @@ import Meditation from '../models/Meditation.js';
 import Client from '../models/Client.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { uploadFile, deleteFile, generateUploadUrl, getPresignedUrl, extractS3KeyFromUrl } from '../utils/storage.js';
+import { withSignedMedia } from '../utils/mediaUrls.js';
 
 const router = express.Router();
 
@@ -117,7 +118,7 @@ router.post('/upload-url', authenticate, async (req, res) => {
       });
     }
     
-    const folder = fileType === 'video' ? 'meditations/videos' : 'meditations/images';
+    const folder = fileType === 'video' ? 'meditations/videos' : fileType === 'audio' ? 'meditations/audio' : 'meditations/images';
     const { uploadUrl, fileUrl, key } = await generateUploadUrl(fileName, contentType, folder);
     
     res.json({
@@ -137,7 +138,7 @@ router.post('/upload-url', authenticate, async (req, res) => {
 // POST /api/meditations/direct - Create meditation with direct S3 URLs
 router.post('/direct', authenticate, async (req, res) => {
   try {
-    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey } = req.body;
+    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, category } = req.body;
     
     let clientId;
     try {
@@ -171,7 +172,10 @@ router.post('/direct', authenticate, async (req, res) => {
       videoUrl: videoUrl || undefined,
       videoKey: vKey || (videoUrl ? extractS3KeyFromUrl(videoUrl) : undefined),
       imageUrl: imageUrl || undefined,
-      imageKey: iKey || (imageUrl ? extractS3KeyFromUrl(imageUrl) : undefined)
+      imageKey: iKey || (imageUrl ? extractS3KeyFromUrl(imageUrl) : undefined),
+      audioUrl: audioUrl || undefined,
+      audioKey: aKey || (audioUrl ? extractS3KeyFromUrl(audioUrl) : undefined),
+      category: category ? String(category).trim() : ''
     };
     
     const meditation = new Meditation(meditationData);
@@ -180,6 +184,7 @@ router.post('/direct', authenticate, async (req, res) => {
     const meditationObj = withClientIdString(await meditation.populate('clientId', 'clientId'));
     if (meditationObj.videoKey) { try { meditationObj.videoUrl = await getPresignedUrl(meditationObj.videoKey); } catch(e) {} }
     if (meditationObj.imageKey) { try { meditationObj.imageUrl = await getPresignedUrl(meditationObj.imageKey); } catch(e) {} }
+    if (meditationObj.audioKey) { try { meditationObj.audioUrl = await getPresignedUrl(meditationObj.audioKey); } catch(e) {} }
     res.status(201).json({ success: true, message: 'Meditation created successfully', data: meditationObj });
   } catch (error) {
     console.error('Error creating meditation:', error);
@@ -256,6 +261,15 @@ router.get('/', authenticate, async (req, res) => {
           }
         }
         
+        if (meditationObj.audioKey || meditationObj.audioUrl) {
+          try {
+            const audioKey = meditationObj.audioKey || extractS3KeyFromUrl(meditationObj.audioUrl);
+            if (audioKey) meditationObj.audioUrl = await getPresignedUrl(audioKey);
+          } catch (error) {
+            console.error('Error generating audio presigned URL:', error);
+          }
+        }
+
         return meditationObj;
       })
     );
@@ -504,7 +518,7 @@ router.post('/', authenticate, upload.fields([
 // PUT /api/meditations/:id/direct - Update meditation with direct S3 URLs
 router.put('/:id/direct', authenticate, async (req, res) => {
   try {
-    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey } = req.body;
+    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, category } = req.body;
     
     let clientId;
     try {
@@ -532,6 +546,18 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     if (name) meditation.name = name.trim();
     if (description) meditation.description = description.trim();
     if (link !== undefined) meditation.link = link.trim();
+    if (category !== undefined) meditation.category = String(category || '').trim();
+
+    // Update audio track if provided
+    if (audioUrl || aKey) {
+      const oldAudio = meditation.audioKey || meditation.audioUrl;
+      const newAudioKey = aKey || (audioUrl ? extractS3KeyFromUrl(audioUrl) : null);
+      if (oldAudio && newAudioKey && oldAudio !== newAudioKey) {
+        try { await deleteFile(oldAudio); } catch (error) { console.error('Failed to delete old audio:', error); }
+      }
+      meditation.audioUrl = audioUrl || null;
+      meditation.audioKey = newAudioKey;
+    }
     
     // Update video URL if provided
     if (videoUrl || vKey) {
@@ -570,6 +596,8 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     if (vk) { try { meditationObj.videoUrl = await getPresignedUrl(vk); } catch(e) {} }
     const ik = meditationObj.imageKey || extractS3KeyFromUrl(meditationObj.imageUrl);
     if (ik) { try { meditationObj.imageUrl = await getPresignedUrl(ik); } catch(e) {} }
+    const ak = meditationObj.audioKey || extractS3KeyFromUrl(meditationObj.audioUrl);
+    if (ak) { try { meditationObj.audioUrl = await getPresignedUrl(ak); } catch(e) {} }
     res.json({ success: true, message: 'Meditation updated successfully', data: meditationObj });
   } catch (error) {
     console.error('Error updating meditation:', error);

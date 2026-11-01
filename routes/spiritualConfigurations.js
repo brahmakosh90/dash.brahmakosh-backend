@@ -15,6 +15,18 @@ const getDefaultCategoryId = (type) => {
   return typeToCategory[type] || '';
 };
 
+const DEFAULT_CATEGORY_BY_TYPE = {
+  meditation: 'Guided Meditation',
+  chanting: 'Daily Chanting',
+  prayer: 'Daily Ritual Prayers',
+  silence: 'Silence',
+  breathing: 'Breathing',
+  mindfulness: 'Mindfulness',
+  yoga: 'Yoga',
+  gratitude: 'Gratitude',
+  reflection: 'Reflection'
+};
+
 // All routes require authentication
 router.use(authenticateToken);
 
@@ -118,9 +130,16 @@ const getConfigurations = async (req, res) => {
       query.type = req.query.type;
     }
     
-    const configurations = await SpiritualConfiguration.find(query)
+    const found = await SpiritualConfiguration.find(query)
       .select('-emotion -chantingType -meditationType -prayerType -isDeleted -__v')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Older records were saved without a category, which reached the app as a blank heading.
+    const configurations = found.map((c) => ({
+      ...c,
+      category: (c.category || '').trim() || DEFAULT_CATEGORY_BY_TYPE[c.type] || 'General'
+    }));
 
     res.status(200).json({
       success: true,
@@ -342,9 +361,36 @@ const getCustomTypes = async (req, res) => {
 };
 
 // Routes
+// Distinct, non-blank categories (with counts) for one type, e.g. ?type=meditation
+const getCategories = async (req, res) => {
+  try {
+    let clientId;
+    if (req.user.role === 'client') clientId = req.user.clientId;
+    else if (req.user.role === 'user') clientId = req.user.clientId?.clientId || req.user.tokenClientId;
+
+    const query = { isDeleted: false, isActive: true };
+    if (clientId) query.clientId = clientId;
+    if (req.query.type) query.type = req.query.type;
+
+    const rows = await SpiritualConfiguration.find(query).select('type category').lean();
+    const counts = new Map();
+    for (const r of rows) {
+      const name = (r.category || '').trim() || DEFAULT_CATEGORY_BY_TYPE[r.type] || 'General';
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    const data = [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+    res.status(200).json({ success: true, data, count: data.length });
+  } catch (error) {
+    console.error('[Spiritual Config] Categories error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 router.post('/', createConfiguration);
 router.get('/', getConfigurations);
 router.get('/custom-types', getCustomTypes);
+router.get('/categories', getCategories);
 router.get('/:id', getSingleConfiguration);
 router.put('/:id', updateConfiguration);
 router.delete('/:id', deleteConfiguration);

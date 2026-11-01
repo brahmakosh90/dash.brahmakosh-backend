@@ -18,6 +18,7 @@ import {
 } from '../../utils/otp.js';
 import { verifyFirebaseToken, isFirebaseAuthEnabled } from '../../utils/firebaseAuth.js';
 import { getPresignedUrl, generateUploadUrl, extractS3KeyFromUrl } from '../../utils/storage.js';
+import { buildGreeting, extractFirstName, normalizeGreetingLanguage } from '../../utils/voiceGreeting.js';
 
 const router = express.Router();
 
@@ -1625,6 +1626,11 @@ router.put('/profile', authenticate, async (req, res) => {
       user.mobile = req.body.mobile;
     }
 
+    // Update language preference if provided and supported
+    if (req.body.preferredLanguage && SUPPORTED_LANGUAGES.includes(String(req.body.preferredLanguage).toLowerCase())) {
+      user.preferredLanguage = String(req.body.preferredLanguage).toLowerCase();
+    }
+
     // Update profile fields if provided
     if (req.body.profile || req.body.name || req.body.dob || req.body.timeOfBirth || 
         req.body.placeOfBirth || req.body.latitude !== undefined || req.body.longitude !== undefined ||
@@ -1726,6 +1732,70 @@ router.put('/profile', authenticate, async (req, res) => {
  * Headers: Authorization: Bearer <user_token>
  * Body: { "fcmToken": "<FCM registration token>", "platform": "android" | "ios" | "web" }
  */
+// ─── Language preference (one source of truth for greetings and localized content) ───
+const SUPPORTED_LANGUAGES = ['hi', 'en'];
+
+/**
+ * GET /api/mobile/user/language  → { language }
+ * PUT /api/mobile/user/language  body: { language: 'hi' | 'en' }
+ */
+router.get('/language', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'user') {
+      return res.status(403).json({ success: false, message: 'Access denied. User access required.' });
+    }
+    const user = await User.findById(req.user._id).select('preferredLanguage').lean();
+    res.json({ success: true, data: { language: user?.preferredLanguage || 'hi', supported: SUPPORTED_LANGUAGES } });
+  } catch (error) {
+    console.error('Get language error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch language' });
+  }
+});
+
+router.put('/language', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'user') {
+      return res.status(403).json({ success: false, message: 'Access denied. User access required.' });
+    }
+    const language = String(req.body?.language ?? '').toLowerCase();
+    if (!SUPPORTED_LANGUAGES.includes(language)) {
+      return res.status(400).json({ success: false, message: `language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
+    }
+    await User.updateOne({ _id: req.user._id }, { preferredLanguage: language });
+    res.json({ success: true, message: 'Language updated', data: { language } });
+  } catch (error) {
+    console.error('Update language error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update language' });
+  }
+});
+
+/**
+ * GET /api/mobile/user/greeting[?lang=hi|en]
+ * Personalized greeting from the profile first name, localized (query > saved preference > hi).
+ * Neutral greeting when the name is missing. The app should play/show it once per session.
+ */
+router.get('/greeting', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'user') {
+      return res.status(403).json({ success: false, message: 'Access denied. User access required.' });
+    }
+    const user = await User.findById(req.user._id).select('profile.name preferredLanguage').lean();
+    const language = normalizeGreetingLanguage(req.query.lang || user?.preferredLanguage);
+    const firstName = extractFirstName(user?.profile?.name);
+    res.json({
+      success: true,
+      data: {
+        firstName: firstName || null,
+        language,
+        greeting: buildGreeting({ fullName: user?.profile?.name, language, voiceName: 'rashmi1', gender: 'female' })
+      }
+    });
+  } catch (error) {
+    console.error('Greeting error:', error);
+    res.status(500).json({ success: false, message: 'Failed to build greeting' });
+  }
+});
+
 router.put('/push-token', authenticate, async (req, res) => {
   try {
     if (req.user.role !== 'user') {
