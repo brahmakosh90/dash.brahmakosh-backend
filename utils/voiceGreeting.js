@@ -54,3 +54,19 @@ export const buildGreeting = ({ fullName, language, voiceName, agentName, gender
   if (gender === 'male') for (const [f, m] of MALE_FORMS) text = text.replaceAll(f, m);
   return text;
 };
+
+// Agent-specific greeting written by the client in the AI Agents tab. "{name}" / "{{name}}" is replaced by the
+// user's first name; when the name is missing the placeholder (and a comma before it) is removed cleanly.
+const NAME_PLACEHOLDER = /\{\{?\s*name\s*\}\}?/gi;
+
+export const renderCustomGreeting = (template, fullName) => {
+  const firstName = extractFirstName(fullName);
+  const text = String(template ?? '').trim();
+  if (!text) return '';
+  if (firstName) return text.replace(NAME_PLACEHOLDER, () => firstName);
+  return text
+    .replace(/[,\s]*\{\{?\s*name\s*\}\}?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,!?।])/g, '$1')
+    .trim();
+};

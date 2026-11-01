@@ -8,7 +8,7 @@ import Agent from '../../models/Agent.js';
 import User from '../../models/User.js';
 import Client from '../../models/Client.js';
 import { uploadBuffer } from '../../utils/storage.js';
-import { buildGreeting } from '../../utils/voiceGreeting.js';
+import { buildGreeting, renderCustomGreeting } from '../../utils/voiceGreeting.js';
 
 // Voice credit billing is switched off for now. Set VOICE_BILLING_ENABLED=true in .env to turn
 // back on both the per-turn credit check and the 10-second credit deduction.
@@ -55,6 +55,7 @@ const VOICE_AGENT_AUDIO_FOLDER    = 'voice-agent-audio';
 const DEEPGRAM_KEEPALIVE_MS       = 8_000;
 const DEEPGRAM_RECONNECT_DELAY_MS = 500;
 const SILENCE_THRESHOLD_MS        = 800;
+const MAX_GREETING_LENGTH         = 160;   // greetings must stay short; longer agent text falls back to the default
 
 // Turn states
 const TURN_SPEAKING     = 'SPEAKING';
@@ -110,6 +111,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
     let voiceConfig           = null;
     let agentPromptOverride   = null;
     let agentName             = null;
+    let agentFirstMessage     = null;   // greeting template set by the client in the AI Agents tab
     let userAudioChunks      = [];
     let isReconnectingDG      = false;
     let pendingAudioChunks    = [];
@@ -542,6 +544,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
           isActive            = true;
           agentPromptOverride = null;
           agentName           = null;
+          agentFirstMessage   = null;
 
           // Resolve Agent
           let requestedVoice = data.voiceName || 'krishna1';
@@ -551,6 +554,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
               if (agent?.voiceName)            requestedVoice      = agent.voiceName;
               if (agent?.systemPrompt)         agentPromptOverride = agent.systemPrompt;
               if (agent?.name)                 agentName           = agent.name;
+              if (agent?.firstMessage?.trim()) agentFirstMessage   = agent.firstMessage.trim();
               console.log('[VoiceAgent] 🤖 Agent resolved:', { name: agent?.name, voiceName: agent?.voiceName });
             } catch (e) {
               console.warn('[VoiceAgent] ⚠️ Could not resolve agentId:', e.message);
@@ -642,7 +646,12 @@ export const handleVoiceAgentWebSocket = (wss) => {
             firstMessageSent = true;
             try {
               const userDoc = await User.findById(userId).select('profile.name preferredLanguage').lean();
-              const greeting = buildGreeting({
+              // Client-managed greeting wins; otherwise the built-in short localized one
+              const customGreeting = renderCustomGreeting(agentFirstMessage, userDoc?.profile?.name);
+              if (customGreeting.length > MAX_GREETING_LENGTH) {
+                console.warn(`[VoiceAgent] Agent greeting is ${customGreeting.length} chars (max ${MAX_GREETING_LENGTH}) - using the default short greeting. Shorten it in the AI Agents tab.`);
+              }
+              const greeting = (customGreeting.length <= MAX_GREETING_LENGTH && customGreeting) || buildGreeting({
                 fullName:  userDoc?.profile?.name,
                 language:  data.language || userDoc?.preferredLanguage,
                 voiceName: voiceConfig?.name || requestedVoice,
