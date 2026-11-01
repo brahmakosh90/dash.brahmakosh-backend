@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const r2Client = new S3Client({
+  // SDK >= 3.729 adds an empty-body CRC32 to presigned PUT URLs, which makes browser uploads fail
+  requestChecksumCalculation: 'WHEN_REQUIRED',
   region: 'auto',
   endpoint: process.env.R2_ENDPOINT,
   credentials: {

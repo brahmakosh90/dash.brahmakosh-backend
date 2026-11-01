@@ -3,11 +3,12 @@ import LiveAvatar from '../models/LiveAvatar.js';
 import { extractS3KeyFromUrl, getPresignedUrl } from '../utils/storage.js';
 import dailyPredictionRoutes from './public/dailyPrediction.js';
 
+import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
 
 router.use('/', dailyPredictionRoutes);
 // GET /api/public/live-avatars - Get all active live avatars (public endpoint)
-router.get('/live-avatars', async (req, res) => {
+router.get('/live-avatars', cacheGet({ ttlSeconds: 60, tag: 'liveavatar' }), async (req, res) => {
   try {
     // Find all active avatars that are enabled
     const avatars = await LiveAvatar.find({

@@ -15,6 +15,8 @@ export { extractS3KeyFromUrl };
 
 // ─── S3 Client ───────────────────────────────────────────────────────────────
 const s3Client = new S3Client({
+  // SDK >= 3.729 adds an empty-body CRC32 to presigned PUT URLs, which makes browser uploads fail; only checksum when required
+  requestChecksumCalculation: 'WHEN_REQUIRED',
   region: process.env.AWS_REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -105,9 +107,14 @@ export const uploadFile = async (file, folder = '') => {
  * Get a presigned URL for reading a file
  * Tries R2 first if mode is r2_only or both, falls back to S3
  */
-export const getPresignedUrl = async (key, expiresIn = 604800) => {
-  const mode = await getStorageMode();
+// A presigned URL differs on every call (it embeds the signing time), so browsers and the app could never
+// cache images and re-downloaded them on every list load. Reuse one signed URL per key until half of its
+// life is gone (max 12h): a stable URL is cacheable, and callers always get at least half the TTL left.
+const SIGNED_URL_CACHE_MAX = 5000;
+const SIGNED_URL_REUSE_MAX_MS = 12 * 60 * 60 * 1000;
+const signedUrlCache = new Map(); // "mode|expiresIn|key" -> { url, reuseUntil }
 
+const signUrlUncached = async (mode, key, expiresIn) => {
   if (mode === 'r2_only' || mode === 'both') {
     try {
       return await getR2Object(key, expiresIn);
@@ -123,8 +130,22 @@ export const getPresignedUrl = async (key, expiresIn = 604800) => {
     Bucket: S3_BUCKET,
     Key: decodeURIComponent(rawKey),
     ResponseContentDisposition: 'inline',
+    ResponseCacheControl: 'private, max-age=86400',
   });
   return getSignedUrl(s3Client, command, { expiresIn });
+};
+
+export const getPresignedUrl = async (key, expiresIn = 604800) => {
+  const mode = await getStorageMode();
+  const cacheKey = `${mode}|${expiresIn}|${key}`;
+  const hit = signedUrlCache.get(cacheKey);
+  if (hit && hit.reuseUntil > Date.now()) return hit.url;
+
+  const url = await signUrlUncached(mode, key, expiresIn);
+
+  if (signedUrlCache.size >= SIGNED_URL_CACHE_MAX) signedUrlCache.delete(signedUrlCache.keys().next().value);
+  signedUrlCache.set(cacheKey, { url, reuseUntil: Date.now() + Math.min((expiresIn * 1000) / 2, SIGNED_URL_REUSE_MAX_MS) });
+  return url;
 };
 
 // ─── Generate Upload URL (presigned PUT) ─────────────────────────────────────
@@ -141,6 +162,8 @@ export const generateUploadUrl = async (fileName, contentType, folder) => {
     const { S3Client: R2S3, PutObjectCommand: R2Put } = await import('@aws-sdk/client-s3');
     const { getSignedUrl: r2SignedUrl } = await import('@aws-sdk/s3-request-presigner');
     const r2 = new R2S3({
+      // SDK >= 3.729 adds an empty-body CRC32 to presigned PUT URLs, which makes browser uploads fail; only checksum when required
+      requestChecksumCalculation: 'WHEN_REQUIRED',
       region: 'auto',
       endpoint: process.env.R2_ENDPOINT,
       credentials: {

@@ -5,6 +5,10 @@ import Admin from '../models/Admin.js';
 import Client from '../models/Client.js';
 import User from '../models/User.js';
 
+
+// Per-request success logs were synchronous stdout writes on every authenticated call (and printed emails).
+// Opt in with AUTH_DEBUG=true when debugging auth; failures are still always logged.
+const authDebug = process.env.AUTH_DEBUG === 'true' ? (...args) => console.log(...args) : () => {};
 export const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production-to-a-strong-random-string';
 
 /**
@@ -78,7 +82,7 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    console.log('[Auth Middleware] Token decoded:', {
+    authDebug('[Auth Middleware] Token decoded:', {
       userId,
       role: userRole,
       email: decoded.email,
@@ -106,7 +110,7 @@ export const authenticate = async (req, res, next) => {
         if (!user._id && userId) {
           user._id = userId;
         }
-        console.log('[Auth Middleware] Client user loaded:', {
+        authDebug('[Auth Middleware] Client user loaded:', {
           _id: user._id?.toString(),
           clientId: user.clientId,
           email: user.email,
@@ -132,7 +136,7 @@ export const authenticate = async (req, res, next) => {
           user.tokenClientId = decoded.clientId;
         }
 
-        console.log('[Auth Middleware] User loaded:', {
+        authDebug('[Auth Middleware] User loaded:', {
           _id: user._id?.toString(),
           role: user.role,
           roleType: typeof user.role,
@@ -189,7 +193,7 @@ export const authenticate = async (req, res, next) => {
     req.decodedEmail = decoded.email;
 
     // Log successful authentication with role verification
-    console.log('[Auth Middleware] Authentication successful:', {
+    authDebug('[Auth Middleware] Authentication successful:', {
       userId: user._id?.toString(),
       role: user.role,
       roleType: typeof user.role,
@@ -238,7 +242,7 @@ export const authorize = (...roles) => {
     }
 
     // DIAGNOSTIC LOGGING
-    console.log('[Auth Middleware] Authorization check:', {
+    authDebug('[Auth Middleware] Authorization check:', {
       userRole: req.user.role,
       userRoleType: typeof req.user.role,
       allowedRoles: roles,
@@ -270,7 +274,7 @@ export const authorize = (...roles) => {
       });
     }
 
-    console.log('[Auth Middleware] Authorization successful:', {
+    authDebug('[Auth Middleware] Authorization successful:', {
       userRole: userRole,
       userId: req.user._id?.toString(),
       allowedRoles

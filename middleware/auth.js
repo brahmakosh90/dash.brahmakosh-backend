@@ -4,6 +4,10 @@ import Client from '../models/Client.js';
 import User from '../models/User.js';
 import Partner from '../models/Partner.js';
 
+
+// Per-request success logs were synchronous stdout writes on every authenticated call (and printed emails).
+// Opt in with AUTH_DEBUG=true when debugging auth; failures are still always logged.
+const authDebug = process.env.AUTH_DEBUG === 'true' ? (...args) => console.log(...args) : () => {};
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -48,7 +52,7 @@ export const authenticate = async (req, res, next) => {
         if (!user._id && decoded.userId) {
           user._id = decoded.userId;
         }
-        console.log('[Auth Middleware] Client user loaded:', {
+        authDebug('[Auth Middleware] Client user loaded:', {
           _id: user._id?.toString(),
           clientId: user.clientId,
           email: user.email,
@@ -81,7 +85,7 @@ export const authenticate = async (req, res, next) => {
       }
     }
     
-    console.log('[Auth Middleware] User found:', {
+    authDebug('[Auth Middleware] User found:', {
       userId: user?._id,
       role: user?.role,
       email: user?.email,
@@ -119,7 +123,7 @@ export const authenticate = async (req, res, next) => {
     req.decodedRole = decoded.role;
     req.decodedClientId = decoded.clientId;
 
-    console.log('[Auth Middleware] Authentication successful:', {
+    authDebug('[Auth Middleware] Authentication successful:', {
       userId: user._id?.toString(),
       role: user.role,
       tokenRole: decoded.role,
@@ -151,7 +155,7 @@ export const authorize = (...roles) => {
     // Handle both array and spread arguments - FIX THE BUG
     const allowedRoles = Array.isArray(roles[0]) ? roles[0] : roles;
 
-    console.log('[Authorization Check]', {
+    authDebug('[Authorization Check]', {
       userRole: req.user.role,
       allowedRoles: allowedRoles,
       isAuthorized: allowedRoles.includes(req.user.role)

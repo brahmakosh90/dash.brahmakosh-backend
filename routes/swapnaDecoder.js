@@ -3,6 +3,7 @@ import SwapnaDecoder from '../models/SwapnaDecoder.js';
 import { getPresignedUrl, generateUploadUrl } from '../utils/storage.js';
 import { authenticateToken } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
+import { cacheGet } from '../utils/responseCache.js';
 import {
   interpretDream,
   normalizeInterpretLanguage,
@@ -65,7 +66,7 @@ router.post('/interpret', authenticateToken, interpretLimiter, async (req, res) 
 });
 
 // GET search suggestions - MUST be before /:id (PUBLIC)
-router.get('/search/suggestions', async (req, res) => {
+router.get('/search/suggestions', cacheGet({ ttlSeconds: 120, tag: 'swapna' }), async (req, res) => {
   try {
     const { q, clientId } = req.query;
     
@@ -130,7 +131,7 @@ router.get('/analytics/stats', authenticateToken, async (req, res) => {
 });
 
 // GET all dream symbols with filtering, sorting, and search (PUBLIC for Active, PROTECTED for management)
-router.get('/', async (req, res) => {
+router.get('/', cacheGet({ ttlSeconds: 120, tag: 'swapna' }), async (req, res) => {
   try {
     const { status, category, subcategory, clientId, search, tags } = req.query;
     const filter = {};
@@ -258,10 +259,13 @@ router.post('/', authenticateToken, async (req, res) => {
       timeSignificance,
       genderSpecific,
       tags,
-      clientId,
       status,
       sortOrder
     } = req.body;
+
+    // A client always creates symbols for itself: take the id from the token, never from the request body.
+    // (Admins may still pass one explicitly.)
+    const clientId = req.user?.role === 'client' ? req.user.clientId : req.body.clientId;
     
     // Validation
     if (!symbolName || !symbolNameHindi || !category) {

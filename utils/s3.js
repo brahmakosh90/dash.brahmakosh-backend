@@ -14,6 +14,8 @@ if (missingEnvVars.length > 0) {
 }
 
 const s3Client = new S3Client({
+  // SDK >= 3.729 adds an empty-body CRC32 to presigned PUT URLs, which makes browser uploads fail; only checksum when required
+  requestChecksumCalculation: 'WHEN_REQUIRED',
   region: process.env.AWS_REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -125,6 +127,8 @@ export const getobjectFor = async (bucket, key) => {
 export const getobjectForWithRegion = async (bucket, key, region) => {
   try {
     const regionalClient = new S3Client({
+      // SDK >= 3.729 adds an empty-body CRC32 to presigned PUT URLs, which makes browser uploads fail; only checksum when required
+      requestChecksumCalculation: 'WHEN_REQUIRED',
       region: region || process.env.AWS_REGION,
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,

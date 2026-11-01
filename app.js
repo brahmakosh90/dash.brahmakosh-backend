@@ -95,6 +95,7 @@ import { seedVoiceConfigs }         from './config/seedVoiceConfigs.js';
 
 import './services/cronJobs.js';
 
+import { invalidateCacheOnWrite } from './utils/responseCache.js';
 startClientNotificationScheduler();
 
 const app    = express();
@@ -141,6 +142,19 @@ app.use('/api/user/payment/webhook', express.raw({ type: 'application/json' }), 
 // ─── Body parsers ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ─── Cache invalidation: a successful write clears the cached public GETs of that resource ──────────
+app.use(invalidateCacheOnWrite({
+  '/api/swapna-decoder': 'swapna',
+  '/api/testimonials':   'testimonial',
+  '/api/founder-messages': 'founder',
+  '/api/brand-assets':   'brand',
+  '/api/meditations':    'meditation',
+  '/api/chantings':      'chanting',
+  '/api/live-avatars':   'liveavatar',
+  '/api/admin':          '*',
+  '/api/client':         '*',
+}));
 
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
