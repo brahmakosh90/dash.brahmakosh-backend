@@ -5,20 +5,14 @@ import Astrology from '../models/Astrology.js';
 
 class AstrologyService {
   constructor() {
-    // Astrology API configuration
     this.baseUrl = process.env.ASTROLOGY_API_BASE_URL || 'https://json.astrologyapi.com/v1';
-    this.apiUserId = process.env.ASTROLOGY_API_USER_ID;
     this.apiKey = process.env.ASTROLOGY_API_KEY;
-    
-    // Create axios instance with basic auth - FIXED: Use JSON content-type
+
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
-        'Content-Type': 'application/json'
-      },
-      auth: {
-        username: this.apiUserId,
-        password: this.apiKey
+        'Content-Type': 'application/json',
+        'x-astrologyapi-key': this.apiKey
       },
       timeout: 30000
     });
