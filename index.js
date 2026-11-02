@@ -3,6 +3,10 @@ import 'dotenv/config';
 
 import server from './app.js';
 import './services/cronJobs.js';
+import { setupOpenAIRealtimeProxy } from './services/openaiRealtimeProxy.js';
+
+// Must run after app.js has set up the other WebSocket servers (voice agent, socket.io)
+setupOpenAIRealtimeProxy(server);   // /realtime
 
 const PORT = process.env.PORT || 5000;
 

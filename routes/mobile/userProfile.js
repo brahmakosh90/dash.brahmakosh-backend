@@ -2059,7 +2059,10 @@ router.get('/search-location', async (req, res) => {
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
-      throw new Error('Google Places API key not configured');
+      return res.json({
+        success: true,
+        data: { locations: [] }
+      });
     }
 
     // Use Google Geocoding API (no CORS issues from backend)
@@ -2150,7 +2153,10 @@ router.get('/reverse-geocode', async (req, res) => {
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
-      throw new Error('Google Places API key not configured');
+      return res.json({
+        success: true,
+        data: { location: null, message: 'Location service not configured' }
+      });
     }
 
     // Use Google Reverse Geocoding API
@@ -2273,7 +2279,10 @@ router.post('/get-location', authenticate, async (req, res) => {
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!apiKey) {
-      throw new Error('Google Places API key not configured');
+      return res.json({
+        success: true,
+        data: { location: null, saved: false, message: 'Location service not configured' }
+      });
     }
 
     // Use Google Reverse Geocoding API

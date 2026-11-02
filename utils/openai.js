@@ -54,7 +54,7 @@ export const getChatCompletion = async (messages, options = {}) => {
     const client = getOpenAIClient();
     
     const {
-      model = process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      model = process.env.OPENAI_MODEL || 'gpt-4o',
       temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
       max_tokens = parseInt(process.env.OPENAI_MAX_TOKENS || '1000'),
       ...otherOptions
@@ -95,7 +95,7 @@ export const getChatCompletionFromDb = async (messages, options = {}, clientId =
     const client = new OpenAI({ apiKey });
 
     const {
-      model = process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      model = process.env.OPENAI_MODEL || 'gpt-4o',
       temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
       max_tokens = parseInt(process.env.OPENAI_MAX_TOKENS || '1000'),
       ...otherOptions
@@ -132,7 +132,7 @@ export const streamChatCompletion = async function* (messages, options = {}) {
     const client = getOpenAIClient();
     
     const {
-      model = process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      model = process.env.OPENAI_MODEL || 'gpt-4o',
       temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
       max_tokens = parseInt(process.env.OPENAI_MAX_TOKENS || '1000'),
       ...otherOptions

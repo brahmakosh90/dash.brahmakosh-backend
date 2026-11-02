@@ -3714,7 +3714,15 @@ router.get('/agents/conversation-logs', authenticate, authorize('client', 'admin
       .populate('agentId', 'name voiceName')
       .lean();
 
+    const clientDoc = await Client.findById(clientId).select('settings.voiceCCR').lean();
+    const voiceCCR = clientDoc?.settings?.voiceCCR ?? 20;
+
     const data = await Promise.all(chats.map(async (c) => {
+      const startTime = c.voiceStartTime || c.createdAt;
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+      const isOngoing = !c.voiceEndTime && new Date(startTime).getTime() > twoHoursAgo;
+      const endTime = c.voiceEndTime || (isOngoing ? null : c.updatedAt);
+      const durationSeconds = endTime ? Math.max(0, Math.round((new Date(endTime) - new Date(startTime)) / 1000)) : 0;
       const messages = await Promise.all((c.messages || []).map(async (msg) => {
         const m = { ...msg };
         if (msg.audioKey) {
@@ -3736,6 +3744,11 @@ router.get('/agents/conversation-logs', authenticate, authorize('client', 'admin
         } : null,
         agent: c.agentId ? { _id: c.agentId._id, name: c.agentId.name, voiceName: c.agentId.voiceName } : null,
         messages,
+        startTime,
+        endTime,
+        durationSeconds,
+        status: isOngoing ? 'ongoing' : 'completed',
+        creditsUsed: Math.floor(durationSeconds / 10) * voiceCCR,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
       };
