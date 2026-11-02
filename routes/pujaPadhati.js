@@ -1,9 +1,28 @@
 import express from 'express';
 import PujaPadhati from '../models/PujaPadhati.js';
-import { getPresignedUrl, generateUploadUrl } from '../utils/storage.js';
+import { generateUploadUrl, extractS3KeyFromUrl } from '../utils/storage.js';
+import { withSignedMedia, isOwnStorageUrl } from '../utils/mediaUrls.js';
 
 import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
+
+const MEDIA_KINDS = ['thumbnail', 'audio', 'video'];
+
+// A storage key must always describe the file the URL/upload points to. The dashboard used to send a new URL
+// next to the OLD key (or a key that never existed), so the signed URL kept showing the old / a missing file.
+//  - key sent                      -> use it
+//  - only a URL of our own storage -> derive the key from it
+//  - only some other URL (or none) -> no key, so the stored URL is served as is
+const resolveKey = (url, key) => {
+  if (typeof key === 'string' && key.trim()) return key.trim();
+  if (typeof url === 'string' && url.trim() && isOwnStorageUrl(url)) {
+    const extracted = extractS3KeyFromUrl(url);
+    // R2 path-style URLs carry the bucket name as the first path segment; it is not part of the key
+    const bucket = process.env.R2_BUCKET;
+    return extracted && bucket && extracted.startsWith(`${bucket}/`) ? extracted.slice(bucket.length + 1) : extracted;
+  }
+  return null;
+};
 
 // GET all pujas with filtering and sorting
 router.get('/', cacheGet({ ttlSeconds: 120, tag: 'puja' }), async (req, res) => {
@@ -20,48 +39,9 @@ router.get('/', cacheGet({ ttlSeconds: 120, tag: 'puja' }), async (req, res) => 
       .sort({ sortOrder: 1, createdAt: -1 })
       .lean();
     
-    // Generate presigned URLs for thumbnails, audio, and video
-    const pujasWithSignedUrls = await Promise.all(
-      pujas.map(async (puja) => {
-        if (puja.thumbnailKey) {
-          try {
-            puja.thumbnailUrl = await getPresignedUrl(puja.thumbnailKey);
-          } catch (error) {
-            console.error(`Error generating presigned URL for ${puja.thumbnailKey}:`, error);
-          }
-        } else if (puja.thumbnailUrl && puja.thumbnailUrl.includes('s3.amazonaws.com')) {
-          // Fallback: If thumbnailKey missing but URL exists, try to extract key
-          try {
-            const url = new URL(puja.thumbnailUrl);
-            const key = url.pathname.substring(1);
-            puja.thumbnailUrl = await getPresignedUrl(key);
-          } catch (error) {
-            console.error(`Error extracting key from URL:`, error);
-          }
-        }
-        
-        // Generate presigned URL for audio
-        if (puja.audioKey) {
-          try {
-            puja.audioUrl = await getPresignedUrl(puja.audioKey);
-          } catch (error) {
-            console.error(`Error generating presigned URL for audio ${puja.audioKey}:`, error);
-          }
-        }
-        
-        // Generate presigned URL for video
-        if (puja.videoKey) {
-          try {
-            puja.videoUrl = await getPresignedUrl(puja.videoKey);
-          } catch (error) {
-            console.error(`Error generating presigned URL for video ${puja.videoKey}:`, error);
-          }
-        }
-        
-        return puja;
-      })
-    );
-    
+    // Fresh signed URLs for thumbnail, audio and video (resolved from the stored key, or from our own storage URL)
+    const pujasWithSignedUrls = await Promise.all(pujas.map((puja) => withSignedMedia(puja, MEDIA_KINDS)));
+
     res.json(pujasWithSignedUrls);
   } catch (error) {
     console.error('Error fetching pujas:', error);
@@ -78,43 +58,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Puja not found' });
     }
     
-    // Generate presigned URL for thumbnail
-    if (puja.thumbnailKey) {
-      try {
-        puja.thumbnailUrl = await getPresignedUrl(puja.thumbnailKey);
-      } catch (error) {
-        console.error(`Error generating presigned URL for ${puja.thumbnailKey}:`, error);
-      }
-    } else if (puja.thumbnailUrl && puja.thumbnailUrl.includes('s3.amazonaws.com')) {
-      // Fallback: If thumbnailKey missing but URL exists, try to extract key
-      try {
-        const url = new URL(puja.thumbnailUrl);
-        const key = url.pathname.substring(1);
-        puja.thumbnailUrl = await getPresignedUrl(key);
-      } catch (error) {
-        console.error(`Error extracting key from URL:`, error);
-      }
-    }
-    
-    // Generate presigned URL for audio
-    if (puja.audioKey) {
-      try {
-        puja.audioUrl = await getPresignedUrl(puja.audioKey);
-      } catch (error) {
-        console.error(`Error generating presigned URL for audio ${puja.audioKey}:`, error);
-      }
-    }
-    
-    // Generate presigned URL for video
-    if (puja.videoKey) {
-      try {
-        puja.videoUrl = await getPresignedUrl(puja.videoKey);
-      } catch (error) {
-        console.error(`Error generating presigned URL for video ${puja.videoKey}:`, error);
-      }
-    }
-    
-    res.json(puja);
+    res.json(await withSignedMedia(puja, MEDIA_KINDS));
   } catch (error) {
     console.error('Error fetching puja:', error);
     res.status(500).json({ error: 'Failed to fetch puja', message: error.message });
@@ -130,10 +74,8 @@ router.post('/upload-url', async (req, res) => {
       return res.status(400).json({ error: 'fileName and fileType are required' });
     }
     
-    const timestamp = Date.now();
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const key = `puja-padhati/${timestamp}-${sanitizedFileName}`;
-    const { uploadUrl, fileUrl } = await generateUploadUrl(fileName, fileType, 'puja-padhati');
+    // `key` must be the one generateUploadUrl signed the upload for; a separately built key points at a file that does not exist
+    const { uploadUrl, fileUrl, key } = await generateUploadUrl(fileName, fileType, 'puja-padhati');
     res.json({ uploadUrl, fileUrl, key });
   } catch (error) {
     console.error('Error generating upload URL:', error);
@@ -195,16 +137,16 @@ router.post('/', async (req, res) => {
       duration: duration ? Number(duration) : undefined,
       language: language || 'Hindi',
       thumbnailUrl,
-      thumbnailKey,
+      thumbnailKey: resolveKey(thumbnailUrl, thumbnailKey),
       pujaVidhi: pujaVidhi || [],
       samagriList: samagriList || [],
       mantras: mantras || [],
       specialInstructions,
       muhurat,
       audioUrl,
-      audioKey,
+      audioKey: resolveKey(audioUrl, audioKey),
       videoUrl,
-      videoKey,
+      videoKey: resolveKey(videoUrl, videoKey),
       clientId,
       status: status || 'Active',
       sortOrder: finalSortOrder
@@ -256,17 +198,23 @@ router.put('/:id', async (req, res) => {
     if (bestDay !== undefined) updateData.bestDay = bestDay;
     if (duration !== undefined) updateData.duration = Number(duration);
     if (language !== undefined) updateData.language = language;
-    if (thumbnailUrl !== undefined) updateData.thumbnailUrl = thumbnailUrl;
-    if (thumbnailKey !== undefined) updateData.thumbnailKey = thumbnailKey;
+    if (thumbnailUrl !== undefined || thumbnailKey !== undefined) {
+      updateData.thumbnailUrl = thumbnailUrl ?? null;
+      updateData.thumbnailKey = resolveKey(thumbnailUrl, thumbnailKey);
+    }
     if (pujaVidhi !== undefined) updateData.pujaVidhi = pujaVidhi;
     if (samagriList !== undefined) updateData.samagriList = samagriList;
     if (mantras !== undefined) updateData.mantras = mantras;
     if (specialInstructions !== undefined) updateData.specialInstructions = specialInstructions;
     if (muhurat !== undefined) updateData.muhurat = muhurat;
-    if (audioUrl !== undefined) updateData.audioUrl = audioUrl;
-    if (audioKey !== undefined) updateData.audioKey = audioKey;
-    if (videoUrl !== undefined) updateData.videoUrl = videoUrl;
-    if (videoKey !== undefined) updateData.videoKey = videoKey;
+    if (audioUrl !== undefined || audioKey !== undefined) {
+      updateData.audioUrl = audioUrl ?? null;
+      updateData.audioKey = resolveKey(audioUrl, audioKey);
+    }
+    if (videoUrl !== undefined || videoKey !== undefined) {
+      updateData.videoUrl = videoUrl ?? null;
+      updateData.videoKey = resolveKey(videoUrl, videoKey);
+    }
     if (status !== undefined) updateData.status = status;
     if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder);
     
