@@ -30,9 +30,10 @@ const astrologyReportSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    // null when the report is stored in R2 only (no public bucket URL); use s3Key + a signed URL instead
     s3Url: {
       type: String,
-      required: true
+      default: null
     },
     language: {
       type: String,

@@ -11,6 +11,7 @@ import mongoose from 'mongoose';
 import { getPresignedUrl, extractS3KeyFromUrl } from '../../utils/storage.js';
 import { withSignedMedia, signKeys, MEDIA_URL_TTL_SECONDS } from '../../utils/mediaUrls.js';
 import { localizeMantraText } from '../../utils/mantraText.js';
+import { normalizeInstructions, audioMimeType } from '../../utils/meditationContent.js';
 
 import { cacheGet } from '../../utils/responseCache.js';
 const router = express.Router();
@@ -582,6 +583,14 @@ const requireClientId = (req, res) => {
 const toMobileMeditation = async (doc) => {
   const obj = await withSignedMedia(doc, ['video', 'image', 'audio']);
   obj.category = (obj.category || '').trim() || DEFAULT_CATEGORY;
+  // A stored key whose signing failed would leave a raw private-bucket URL: it plays silence, so serve null instead
+  if (obj.audioKey && obj.audioUrl && !/X-Amz-Signature=/i.test(obj.audioUrl)) {
+    console.error(`[Meditation] audio for ${obj._id} could not be signed (key ${obj.audioKey}); check storage credentials`);
+    obj.audioUrl = null;
+  }
+  obj.audioMimeType = audioMimeType(obj.audioKey || obj.audioUrl);
+  // Guided steps for the instruction overlay (empty array when none were authored)
+  obj.instructions = normalizeInstructions(obj.instructions);
   // `mediaUrl` = the one URL a player should use: audio track first, then video
   obj.mediaUrl = obj.audioUrl || obj.videoUrl || null;
   return obj;

@@ -5,7 +5,8 @@ import Meditation from '../models/Meditation.js';
 import Client from '../models/Client.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { uploadFile, deleteFile, generateUploadUrl, getPresignedUrl, extractS3KeyFromUrl } from '../utils/storage.js';
-import { withSignedMedia } from '../utils/mediaUrls.js';
+import { withSignedMedia, isOwnStorageUrl } from '../utils/mediaUrls.js';
+import { normalizeCategory, normalizeInstructions } from '../utils/meditationContent.js';
 
 const router = express.Router();
 
@@ -141,7 +142,7 @@ router.post('/upload-url', authenticate, async (req, res) => {
 // POST /api/meditations/direct - Create meditation with direct S3 URLs
 router.post('/direct', authenticate, async (req, res) => {
   try {
-    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, category } = req.body;
+    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, category, instructions } = req.body;
     
     let clientId;
     try {
@@ -178,7 +179,8 @@ router.post('/direct', authenticate, async (req, res) => {
       imageKey: iKey || (imageUrl ? extractS3KeyFromUrl(imageUrl) : undefined),
       audioUrl: audioUrl || undefined,
       audioKey: aKey || (audioUrl ? extractS3KeyFromUrl(audioUrl) : undefined),
-      category: category ? String(category).trim() : ''
+      category: normalizeCategory(category),
+      instructions: normalizeInstructions(instructions)
     };
     
     const meditation = new Meditation(meditationData);
@@ -266,13 +268,14 @@ router.get('/', authenticate, async (req, res) => {
         
         if (meditationObj.audioKey || meditationObj.audioUrl) {
           try {
-            const audioKey = meditationObj.audioKey || extractS3KeyFromUrl(meditationObj.audioUrl);
+            const audioKey = meditationObj.audioKey || (isOwnStorageUrl(meditationObj.audioUrl) ? extractS3KeyFromUrl(meditationObj.audioUrl) : null);
             if (audioKey) meditationObj.audioUrl = await getPresignedUrl(audioKey);
           } catch (error) {
             console.error('Error generating audio presigned URL:', error);
           }
         }
 
+        meditationObj.category = normalizeCategory(meditationObj.category);
         return meditationObj;
       })
     );
@@ -324,6 +327,9 @@ router.get('/:id', authenticate, async (req, res) => {
     if (vKey) { try { meditationObj.videoUrl = await getPresignedUrl(vKey); } catch(e) {} }
     const iKey = meditationObj.imageKey || extractS3KeyFromUrl(meditationObj.imageUrl);
     if (iKey) { try { meditationObj.imageUrl = await getPresignedUrl(iKey); } catch(e) {} }
+    const aKey = meditationObj.audioKey || (isOwnStorageUrl(meditationObj.audioUrl) ? extractS3KeyFromUrl(meditationObj.audioUrl) : null);
+    if (aKey) { try { meditationObj.audioUrl = await getPresignedUrl(aKey); } catch(e) { console.error('Error generating audio presigned URL:', e); } }
+    meditationObj.category = normalizeCategory(meditationObj.category);
     res.json({ success: true, data: meditationObj });
   } catch (error) {
     console.error('Error fetching meditation:', error);
@@ -521,7 +527,7 @@ router.post('/', authenticate, upload.fields([
 // PUT /api/meditations/:id/direct - Update meditation with direct S3 URLs
 router.put('/:id/direct', authenticate, async (req, res) => {
   try {
-    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, category } = req.body;
+    const { name, description, link, videoUrl, imageUrl, videoKey: vKey, imageKey: iKey, audioUrl, audioKey: aKey, category, instructions } = req.body;
     
     let clientId;
     try {
@@ -549,7 +555,8 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     if (name) meditation.name = name.trim();
     if (description) meditation.description = description.trim();
     if (link !== undefined) meditation.link = link.trim();
-    if (category !== undefined) meditation.category = String(category || '').trim();
+    if (category !== undefined) meditation.category = normalizeCategory(category);
+    if (instructions !== undefined) meditation.instructions = normalizeInstructions(instructions);
 
     // Update audio track if provided
     if (audioUrl || aKey) {
@@ -599,7 +606,7 @@ router.put('/:id/direct', authenticate, async (req, res) => {
     if (vk) { try { meditationObj.videoUrl = await getPresignedUrl(vk); } catch(e) {} }
     const ik = meditationObj.imageKey || extractS3KeyFromUrl(meditationObj.imageUrl);
     if (ik) { try { meditationObj.imageUrl = await getPresignedUrl(ik); } catch(e) {} }
-    const ak = meditationObj.audioKey || extractS3KeyFromUrl(meditationObj.audioUrl);
+    const ak = meditationObj.audioKey || (isOwnStorageUrl(meditationObj.audioUrl) ? extractS3KeyFromUrl(meditationObj.audioUrl) : null);
     if (ak) { try { meditationObj.audioUrl = await getPresignedUrl(ak); } catch(e) {} }
     res.json({ success: true, message: 'Meditation updated successfully', data: meditationObj });
   } catch (error) {

@@ -23,7 +23,7 @@ import numerologyService from '../services/numerologyService.js';
 import doshaService from '../services/doshaService.js';
 import remedyService from '../services/remedyService.js';
 import { astrologyExternalService } from '../services/astrologyExternalService.js';
-import { deductCredits } from '../services/creditLedger.js';
+import { deductCredits, grantCredits } from '../services/creditLedger.js';
 import axios from 'axios';
 
 // Credit costs per report type (1 credit = 1 INR)
@@ -1630,11 +1630,8 @@ router.get('/users/:userId/panchang', authenticate, authorize('client', 'admin',
 
     // If no date provided, use today
     if (!date) {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      date = `${year}-${month}-${day}`;
+      // Today in IST - the server's own timezone (usually UTC) would show yesterday until 05:30 IST
+      date = panchangService.getTodayKey(new Date());
       console.log('[Client API] No date provided, using today:', date);
     }
 
@@ -2439,7 +2436,26 @@ router.post('/users/:userId/horoscope/monthly/:sign', authenticate, authorize('c
  *
  * Birth details are taken from DB user.profile (+ liveLocation when available).
  */
-router.post('/users/:userId/reports/kundali/:reportType', authenticate, authorize('client', 'admin', 'super_admin', 'user'), async (req, res) => {
+const refundKundaliCredits = async (userId, amount, rt, reason) => {
+  try {
+    await grantCredits({
+      userId,
+      amount,
+      addedBy: userId,
+      addedByRole: 'user',
+      description: `Refund: Kundali ${rt} PDF could not be generated (${String(reason).slice(0, 120)})`
+    });
+    console.log(`[Kundali] Refunded ${amount} credits to ${userId} (${reason})`);
+  } catch (refundError) {
+    console.error(`[Kundali] CRITICAL: refund of ${amount} credits to ${userId} failed:`, refundError.message);
+  }
+};
+
+// Shared by POST (always generates) and GET (returns the latest stored report, generates only if none exists)
+const kundaliReportHandler = async (req, res) => {
+  let chargedAmount = 0;
+  let chargedUserId = null;
+  let chargedType = null;
   try {
     const { userId, reportType } = req.params;
     const rt = String(reportType || '').toLowerCase();
@@ -2477,8 +2493,23 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       });
     }
 
+    // GET is idempotent: serve the latest stored report instead of charging again
+    if (req.method === 'GET' && req.query.regenerate !== 'true') {
+      const language = req.query.language || 'en';
+      const existing = await AstrologyReport.findOne({ userId, category: 'kundali', reportType: rt, language }).sort({ createdAt: -1 }).lean();
+      if (existing) {
+        let url = existing.providerPdfUrl;
+        try { url = await getPresignedUrl(existing.s3Key, 3600); } catch (e) { console.warn('[Kundali] Could not sign stored report, using provider URL:', e.message); }
+        return res.json({ success: true, reportType: rt, cached: true, creditsDeducted: 0, url, history: existing });
+      }
+    }
+
+    const genderRaw = String(req.body?.gender || req.query?.gender || user.profile?.gender || '').toLowerCase();
+    const gender = genderRaw === 'female' ? 'female' : 'male'; // the PDF API requires a gender; "male" only when none is on file
+
     const payload = {
       name: user.profile?.name || user.profile?.firstName,
+      gender,
       day: dob.getDate(),
       month: dob.getMonth() + 1,
       year: dob.getFullYear(),
@@ -2488,7 +2519,7 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       longitude: Number(lon),
       timezone: Number(req.body?.timezone ?? 5.5),
       place,
-      language: req.body?.language || 'en',
+      language: req.body?.language || req.query?.language || 'en',
       report_type: rt,
 
       footer_link: req.body?.footer_link || process.env.ASTROLOGY_PDF_FOOTER_LINK || '',
@@ -2509,27 +2540,36 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       description: `Kundali ${rt} PDF report generation`,
       reportType: `kundali_${rt}`,
     });
+    chargedAmount = creditCost;
+    chargedUserId = userId;
+    chargedType = rt;
 
     // 1) Call AstrologyAPI PDF endpoint
     const data = await astrologyExternalService.generateKundaliPdf(payload);
     const providerPdfUrl = data?.pdf_url || data?.url || null;
 
     if (!providerPdfUrl) {
+      // Provider answers HTTP 200 with { status: false, msg } for plan/validation problems
+      await refundKundaliCredits(userId, chargedAmount, rt, data?.msg || 'no pdf_url');
+      chargedAmount = 0;
       return res.status(502).json({
         success: false,
-        message: 'Astrology PDF API did not return pdf_url',
+        message: data?.msg || 'Astrology PDF API did not return pdf_url',
+        creditsRefunded: true,
         providerResponse: process.env.NODE_ENV === 'development' ? data : undefined
       });
     }
 
     // 2) Download PDF as buffer
-    const pdfResponse = await axios.get(providerPdfUrl, { responseType: 'arraybuffer' });
+    const pdfResponse = await axios.get(providerPdfUrl, { responseType: 'arraybuffer', timeout: 60000, maxContentLength: 50 * 1024 * 1024 });
     const buffer = Buffer.from(pdfResponse.data);
 
     // 3) Upload to storage (R2/S3/both based on settings)
     const s3Folder = 'astrology-reports';
     const filename = `${userId}_${rt}_${Date.now()}.pdf`;
     const uploadResult = await uploadBuffer(buffer, `${s3Folder}/${filename}`, 'application/pdf');
+    let signedUrl = providerPdfUrl;
+    try { signedUrl = await getPresignedUrl(uploadResult.key, 3600); } catch (e) { console.warn('[Kundali] Could not sign stored report, using provider URL:', e.message); }
 
     // 4) Save history record
     const reportDoc = await AstrologyReport.create({
@@ -2539,7 +2579,7 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       provider: 'astrologyapi',
       providerPdfUrl,
       s3Key: uploadResult.key,
-      s3Url: uploadResult.url,
+      s3Url: uploadResult.url || null,
       language: payload.language,
       place,
       meta: {
@@ -2561,6 +2601,7 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       reportType: rt,
       creditsDeducted: creditCost,
       walletBalance: deduction.newBalance,
+      url: signedUrl,
       providerResponse: data,
       s3: {
         key: uploadResult.key,
@@ -2569,7 +2610,12 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
       history: reportDoc
     });
   } catch (error) {
-    const status = error.status || error.response?.status || 500;
+    // Anything that fails after the wallet was charged gives the credits back
+    if (chargedAmount > 0) {
+      await refundKundaliCredits(chargedUserId, chargedAmount, chargedType, error.response?.data?.msg || error.message);
+    }
+    const providerMsg = error.response?.data?.msg;
+    const status = error.response ? 502 : (error.status || 500); // provider HTTP errors (e.g. 405 plan not allowed) -> bad gateway
     if (error.code === 'INSUFFICIENT_CREDITS') {
       return res.status(402).json({
         success: false,
@@ -2581,11 +2627,14 @@ router.post('/users/:userId/reports/kundali/:reportType', authenticate, authoriz
     }
     return res.status(status).json({
       success: false,
-      message: error.message || 'Failed to generate kundali PDF',
+      message: providerMsg || error.message || 'Failed to generate kundali PDF',
+      creditsRefunded: chargedAmount > 0 ? true : undefined,
       error: process.env.NODE_ENV === 'development' ? (error.response?.data || error.message) : undefined
     });
   }
-});
+};
+
+router.post('/users/:userId/reports/kundali/:reportType', authenticate, authorize('client', 'admin', 'super_admin', 'user'), kundaliReportHandler);
 
 /**
  * GET /api/client/users/:userId/reports/kundali/history
@@ -2670,6 +2719,14 @@ router.get('/users/:userId/reports/kundali/:reportId/download', authenticate, au
     });
   }
 });
+
+/**
+ * GET /api/client/users/:userId/reports/kundali/:reportType   (mini | basic | pro)
+ * Returns the latest stored report for the user (no charge); generates one only if none exists.
+ * Query: language=en|hi, regenerate=true to force a new (charged) report.
+ * Registered after /kundali/history so "history" is not captured as a reportType.
+ */
+router.get('/users/:userId/reports/kundali/:reportType', authenticate, authorize('client', 'admin', 'super_admin', 'user'), kundaliReportHandler);
 
 /**
  * POST /api/client/users/:userId/reports/match-making

@@ -14,10 +14,16 @@ const jsonClient = axios.create({
   timeout: Number(process.env.ASTROLOGY_JSON_TIMEOUT_MS || 30000)
 });
 
+// Dedicated PDF credentials use Basic auth; otherwise fall back to the main key via the x-astrologyapi-key header
+const pdfUsesBasicAuth = Boolean(PDF_USER_ID && PDF_API_KEY);
+const pdfHeaderKey = PDF_API_KEY || JSON_API_KEY;
 const pdfClient = axios.create({
   baseURL: PDF_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-  auth: PDF_USER_ID && PDF_API_KEY ? { username: PDF_USER_ID, password: PDF_API_KEY } : undefined,
+  headers: {
+    'Content-Type': 'application/json',
+    ...(!pdfUsesBasicAuth && pdfHeaderKey ? { 'x-astrologyapi-key': pdfHeaderKey } : {})
+  },
+  auth: pdfUsesBasicAuth ? { username: PDF_USER_ID, password: PDF_API_KEY } : undefined,
   timeout: Number(process.env.ASTROLOGY_PDF_TIMEOUT_MS || 60000)
 });
 
@@ -30,8 +36,8 @@ const ensureJsonCreds = () => {
 };
 
 const ensurePdfCreds = () => {
-  if (!PDF_USER_ID || !PDF_API_KEY) {
-    const err = new Error('Astrology PDF API credentials not configured (ASTROLOGY_PDF_USER_ID / ASTROLOGY_PDF_API_KEY)');
+  if (!pdfUsesBasicAuth && !pdfHeaderKey) {
+    const err = new Error('Astrology PDF API credentials not configured (ASTROLOGY_PDF_API_KEY or ASTROLOGY_API_KEY)');
     err.status = 500;
     throw err;
   }

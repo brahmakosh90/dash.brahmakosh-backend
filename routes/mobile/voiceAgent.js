@@ -8,7 +8,8 @@ import Agent from '../../models/Agent.js';
 import User from '../../models/User.js';
 import Client from '../../models/Client.js';
 import { uploadBuffer } from '../../utils/storage.js';
-import { buildGreeting, renderCustomGreeting } from '../../utils/voiceGreeting.js';
+import { buildGreeting, buildReturningGreeting, renderCustomGreeting } from '../../utils/voiceGreeting.js';
+import { getUserChatContext, buildContextPrompt, updateChatSummary, invalidateUserChatContext } from '../../services/userChatContext.js';
 
 // Voice credit billing is switched off for now. Set VOICE_BILLING_ENABLED=true in .env to turn
 // back on both the per-turn credit check and the 10-second credit deduction.
@@ -112,6 +113,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
     let agentPromptOverride   = null;
     let agentName             = null;
     let agentFirstMessage     = null;   // greeting template set by the client in the AI Agents tab
+    let userContext           = null;   // first name + topics of earlier sessions (personalised greeting / prompt)
     let userAudioChunks      = [];
     let isReconnectingDG      = false;
     let pendingAudioChunks    = [];
@@ -120,6 +122,15 @@ export const handleVoiceAgentWebSocket = (wss) => {
     let currentTurnId         = null;   // active AI turn ID
     let currentTurnState      = null;   // SPEAKING | INTERRUPTED | COMPLETED
     let voiceBillingInterval  = null;   // 10-second billing timer
+
+    // Store a short topic for this conversation so the next session can pick up where it left off (background, never throws)
+    const summariseEndedChat = () => {
+      if (!chat || !userId) return;
+      const endedUserId = userId;
+      updateChatSummary(chat._id)
+        .then(() => invalidateUserChatContext(endedUserId))
+        .catch(() => {});
+    };
 
     // ── Keepalive ──────────────────────────────────────────────────────────────
     const stopKeepalive = () => {
@@ -469,7 +480,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
         safeSend({ type: 'agent_state', state: 'processing' });
 
         const systemPrompt = agentPromptOverride || voiceConfig?.prompt || DEFAULT_PROMPT;
-        const voiceSystemPrompt = systemPrompt + '\n\nCRITICAL VOICE RULES (follow strictly):\n- NEVER say "Namaste" or any greeting after the very first message. No exceptions.\n- NEVER repeat your introduction or say who you are after the first message.\n- Answer ONLY what the user asked. Maximum 2 sentences per response.\n- Be direct. No filler phrases.';
+        const voiceSystemPrompt = systemPrompt + buildContextPrompt(userContext) + '\n\nCRITICAL VOICE RULES (follow strictly):\n- NEVER say "Namaste" or any greeting after the very first message. No exceptions.\n- NEVER repeat your introduction or say who you are after the first message.\n- Answer ONLY what the user asked. Maximum 2 sentences per response.\n- Be direct. No filler phrases.';
         const completion   = await openai.chat.completions.create({
           model:       process.env.OPENAI_MODEL || 'gpt-4o-mini',
           messages:    [
@@ -584,6 +595,13 @@ export const handleVoiceAgentWebSocket = (wss) => {
             await chat.save();
           }
 
+          // Who is this user and what did earlier sessions cover? Never blocks the call if it fails.
+          try {
+            userContext = await getUserChatContext(userId, { excludeChatId: chat._id });
+          } catch (err) {
+            console.warn('[VoiceAgent] Could not load user context:', err.message);
+          }
+
           // Init Deepgram
           try {
             await initDeepgram();
@@ -651,13 +669,18 @@ export const handleVoiceAgentWebSocket = (wss) => {
               if (customGreeting.length > MAX_GREETING_LENGTH) {
                 console.warn(`[VoiceAgent] Agent greeting is ${customGreeting.length} chars (max ${MAX_GREETING_LENGTH}) - using the default short greeting. Shorten it in the AI Agents tab.`);
               }
-              const greeting = (customGreeting.length <= MAX_GREETING_LENGTH && customGreeting) || buildGreeting({
+              const greetingArgs = {
                 fullName:  userDoc?.profile?.name,
                 language:  data.language || userDoc?.preferredLanguage,
                 voiceName: voiceConfig?.name || requestedVoice,
                 agentName,
                 gender:    voiceConfig?.gender,
-              });
+              };
+              // Returning users hear "welcome back" (+ last topic); first-timers keep the standard introduction
+              const defaultGreeting = userContext?.hasHistory
+                ? buildReturningGreeting({ ...greetingArgs, topic: userContext.lastTopic, topicLanguage: userContext.lastTopicLanguage })
+                : buildGreeting(greetingArgs);
+              const greeting = (customGreeting.length <= MAX_GREETING_LENGTH && customGreeting) || defaultGreeting;
               const firstTurnId = createTurnId();
               safeSend({ type: 'ai_response', text: greeting, turnId: firstTurnId });
               const { audioKey } = await streamElevenLabsTTS(greeting, firstTurnId);
@@ -678,6 +701,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
             try {
               chat.voiceEndTime = new Date();
               await chat.save();
+              summariseEndedChat();
             } catch (e) {}
           }
           cleanup();
@@ -733,6 +757,7 @@ export const handleVoiceAgentWebSocket = (wss) => {
       if (chat && isActive) {
         try {
           Chat.findByIdAndUpdate(chat._id, { voiceEndTime: new Date() }).catch(() => {});
+          summariseEndedChat();
         } catch (e) {}
       }
       cleanup();

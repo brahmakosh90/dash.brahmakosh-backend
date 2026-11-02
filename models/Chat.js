@@ -58,6 +58,21 @@ const chatSchema = new mongoose.Schema({
     default: null
   },
   messages: [messageSchema],
+  /** Short AI-written topic of this conversation, used for "last time we talked about..." continuity */
+  summary: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  summaryLanguage: {
+    type: String,
+    default: null
+  },
+  /** messages.length when the summary was written; a changed length means the summary is stale */
+  summaryMessageCount: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now

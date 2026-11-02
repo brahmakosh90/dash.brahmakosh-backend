@@ -9,7 +9,8 @@ const router = express.Router();
  * GET /api/mobile/panchang
  * Get today's panchang data for the authenticated user
  * Headers: Authorization: Bearer <token>
- * Query: ?lat=19.07&lon=72.87&forceRefresh=false
+ * Query: ?lat=19.07&lon=72.87&date=2026-11-02&tz=5.5&forceRefresh=false
+ *   date - optional YYYY-MM-DD (default: today in `tz`); tz - optional hours from UTC (default 5.5)
  */
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -23,6 +24,30 @@ router.get('/', authenticate, async (req, res) => {
     let latitude  = req.query.lat  ? parseFloat(req.query.lat)  : null;
     let longitude = req.query.lon  ? parseFloat(req.query.lon)  : null;
     const forceRefresh = req.query.forceRefresh === 'true';
+
+    if ((req.query.lat && Number.isNaN(latitude)) || (req.query.lon && Number.isNaN(longitude))) {
+      return res.status(400).json({ success: false, message: 'lat and lon must be valid numbers' });
+    }
+
+    // Timezone the date is interpreted in (hours from UTC). Invalid values are rejected, not silently ignored.
+    let tzone = 5.5;
+    if (req.query.tz !== undefined && req.query.tz !== '') {
+      tzone = Number(req.query.tz);
+      if (!Number.isFinite(tzone) || tzone < -12 || tzone > 14) {
+        return res.status(400).json({ success: false, message: 'tz must be a number of hours from UTC between -12 and 14 (e.g. 5.5)' });
+      }
+    }
+
+    // Requested calendar date; defaults to today in the user's timezone
+    let currentDate = new Date();
+    if (req.query.date) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(req.query.date));
+      const parsed = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+      if (!parsed || Number.isNaN(parsed.getTime()) || parsed.getUTCMonth() !== +m[2] - 1) {
+        return res.status(400).json({ success: false, message: 'Invalid date. Use YYYY-MM-DD (e.g. 2026-11-02)' });
+      }
+      currentDate = parsed;
+    }
 
     // Fallback to user's saved location if not provided
     if (latitude == null || longitude == null) {
@@ -45,15 +70,14 @@ router.get('/', authenticate, async (req, res) => {
     const user = await User.findById(userId).select('profile').lean();
     const userProfile = user?.profile || null;
 
-    const currentDate = new Date();
-
     const panchangData = await panchangService.getCompletePanchangData(
       userId,
       currentDate,
       latitude,
       longitude,
       forceRefresh,
-      userProfile
+      userProfile,
+      { tzone }
     );
 
     res.json({

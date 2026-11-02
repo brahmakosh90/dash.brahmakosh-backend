@@ -3,6 +3,7 @@ import Chat from '../../models/Chat.js';
 import { authenticate } from '../../middleware/auth.js';
 import { getChatCompletion } from '../../utils/openai.js';
 import { getPromptContent, PROMPT_KEYS } from '../../services/promptService.js';
+import { getUserChatContext, buildContextPrompt, updateChatSummary, invalidateUserChatContext } from '../../services/userChatContext.js';
 
 // Per-user processing lock — prevents concurrent requests for same user
 const processingUsers = new Set();
@@ -358,6 +359,14 @@ router.post('/:chatId/message', authenticate, async (req, res) => {
       console.warn('[Chat POST :chatId/message] Failed to load mobile chat prompt. Using fallback.', promptError.message);
     }
 
+    // Personalise: user's first name and what earlier sessions were about (failure just means no extra context)
+    try {
+      const userContext = await getUserChatContext(req.user._id, { excludeChatId: chat._id });
+      systemPrompt += buildContextPrompt(userContext);
+    } catch (contextError) {
+      console.warn('[Chat POST :chatId/message] Could not load user context:', contextError.message);
+    }
+
     // Prepare messages for OpenAI (format: { role, content })
     const openaiMessages = [
       { role: 'system', content: systemPrompt },
@@ -382,6 +391,12 @@ router.post('/:chatId/message', authenticate, async (req, res) => {
     }
 
     await chat.save();
+
+    // Keep the topic summary fresh (after the 1st exchange, then every 8th user message); background only
+    const userMessageCount = chat.messages.filter(m => m.role === 'user').length;
+    if (userMessageCount === 1 || userMessageCount % 8 === 0) {
+      updateChatSummary(chat._id).then(() => invalidateUserChatContext(req.user._id)).catch(() => {});
+    }
 
     res.json({
       success: true,

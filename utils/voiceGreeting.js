@@ -70,3 +70,30 @@ export const renderCustomGreeting = (template, fullName) => {
     .replace(/\s+([.,!?।])/g, '$1')
     .trim();
 };
+
+// Greeting for a user who has spoken with the assistant before. Names the last topic when it is known
+// and written in the same language as the greeting; otherwise a plain "welcome back". Hindi and English only,
+// other languages keep the standard greeting. Worded gender-neutral, so no male/female variants are needed.
+const RETURNING = {
+  en: {
+    named:         'Welcome back, {name}. How are you feeling today?',
+    namedTopic:    'Welcome back, {name}. Last time we talked about {topic}. How are you feeling today?',
+    neutral:       'Welcome back. How are you feeling today?',
+    neutralTopic:  'Welcome back. Last time we talked about {topic}. How are you feeling today?',
+  },
+  hi: {
+    named:         'वापसी पर स्वागत है {name}। आज आप कैसा महसूस कर रहे हैं?',
+    namedTopic:    'वापसी पर स्वागत है {name}। पिछली बार हमने {topic} के बारे में बात की थी। आज आप कैसा महसूस कर रहे हैं?',
+    neutral:       'वापसी पर स्वागत है। आज आप कैसा महसूस कर रहे हैं?',
+    neutralTopic:  'वापसी पर स्वागत है। पिछली बार हमने {topic} के बारे में बात की थी। आज आप कैसा महसूस कर रहे हैं?',
+  },
+};
+
+export const buildReturningGreeting = ({ fullName, language, topic, topicLanguage, voiceName, agentName, gender } = {}) => {
+  const lang = normalizeGreetingLanguage(language);
+  if (!RETURNING[lang]) return buildGreeting({ fullName, language, voiceName, agentName, gender });
+  const firstName = extractFirstName(fullName);
+  const useTopic  = Boolean(topic) && (!topicLanguage || topicLanguage === lang);
+  const key = `${firstName ? 'named' : 'neutral'}${useTopic ? 'Topic' : ''}`;
+  return RETURNING[lang][key].replace('{name}', () => firstName).replace('{topic}', () => topic);
+};

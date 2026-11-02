@@ -8,6 +8,32 @@ export const MEDIA_URL_TTL_SECONDS = 6 * 60 * 60; // long enough for a full sess
 
 const MEDIA_KINDS = ['video', 'image', 'audio'];
 
+// Hosts whose URLs point into our own buckets and can be re-signed from their path. A URL on any other host
+// (YouTube, a third-party CDN...) is already playable as stored: turning its path into a "key" and signing it
+// replaced it with a URL to an object that does not exist, so the track played silence.
+const OWN_HOST_SUFFIXES = ['.amazonaws.com', '.r2.cloudflarestorage.com', '.r2.dev', '.brahmakosh.com'];
+
+const ownHosts = () => {
+  const hosts = new Set();
+  for (const v of [process.env.R2_ENDPOINT, process.env.R2_PUBLIC_URL, ...(process.env.MEDIA_CDN_HOSTS || '').split(',')]) {
+    const raw = String(v || '').trim();
+    if (!raw) continue;
+    try { hosts.add(new URL(raw.includes('://') ? raw : `https://${raw}`).hostname.toLowerCase()); } catch { /* ignore bad env value */ }
+  }
+  return hosts;
+};
+
+export const isOwnStorageUrl = (url) => {
+  if (typeof url !== 'string') return false;
+  if (url.startsWith('s3://')) return true;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return OWN_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix)) || ownHosts().has(host);
+  } catch {
+    return false;
+  }
+};
+
 const signKey = async (key, ttl) => {
   try {
     return await getPresignedUrl(key, ttl);
@@ -26,7 +52,7 @@ export const withSignedMedia = async (doc, kinds = MEDIA_KINDS, ttl = MEDIA_URL_
   const obj = typeof doc?.toObject === 'function' ? doc.toObject() : { ...doc };
   await Promise.all(
     kinds.map(async (kind) => {
-      const key = obj[`${kind}Key`] || (obj[`${kind}Url`] ? extractS3KeyFromUrl(obj[`${kind}Url`]) : null);
+      const key = obj[`${kind}Key`] || (isOwnStorageUrl(obj[`${kind}Url`]) ? extractS3KeyFromUrl(obj[`${kind}Url`]) : null);
       if (!key) return;
       const signed = await signKey(key, ttl);
       if (signed) obj[`${kind}Url`] = signed;

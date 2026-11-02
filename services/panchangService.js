@@ -150,13 +150,16 @@ class PanchangService {
    * Checks DB first (for today's date), then fetches from API if needed
    * @param {object} userProfile - Optional. profile.dob, profile.timeOfBirth, profile.latitude, profile.longitude for personalized nakshatra
    */
-  async getCompletePanchangData(userId, currentDate, latitude, longitude, forceRefresh = false, userProfile = null) {
+  async getCompletePanchangData(userId, currentDate, latitude, longitude, forceRefresh = false, userProfile = null, options = {}) {
     try {
       // Step 1: Validate input
       this.validatePanchangInput(currentDate, latitude, longitude);
 
-      // Get today's date string for cache key
-      const todayKey = this.getTodayKey(currentDate);
+      // Timezone (hours from UTC) the date/time is interpreted in. Defaults to IST.
+      const tzone = this.resolveTzone(options.tzone);
+
+      // Date string for cache key, computed in the user's timezone (not the server's)
+      const todayKey = this.getTodayKey(currentDate, tzone);
 
       // Step 2: Check if data exists in DB for today (unless force refresh)
       if (!forceRefresh) {
@@ -165,17 +168,17 @@ class PanchangService {
           dateKey: todayKey 
         });
         
-        if (existingData) {
+        if (existingData && this.isSameLocation(existingData.location, latitude, longitude)) {
           console.log('[Panchang Service] Returning cached data from DB for user:', userId, 'Date:', todayKey);
           return this.formatPanchangResponse(existingData);
         }
-        console.log('[Panchang Service] No cached data found for today, fetching from API');
+        console.log('[Panchang Service] No usable cached data for', todayKey, '- fetching from API');
       } else {
         console.log('[Panchang Service] Force refresh requested, fetching fresh data from API');
       }
 
       // Step 3: Prepare current date and location data for API
-      const requestData = this.prepareRequestData(currentDate, latitude, longitude);
+      const requestData = this.prepareRequestData(currentDate, latitude, longitude, tzone);
 
       // Step 4: Resolve birth place (geocode placeOfBirth if no lat/lon), then fetch nakshatra or return missingFields
       const resolvedProfile = await this.resolveBirthPlaceProfile(userProfile);
@@ -253,6 +256,10 @@ class PanchangService {
     const lat = parseFloat(latitude);
     const lon = parseFloat(longitude);
 
+    if (Number.isNaN(lat) || Number.isNaN(lon)) {
+      throw new Error('Latitude and longitude must be valid numbers');
+    }
+
     if (lat < -90 || lat > 90) {
       throw new Error('Latitude must be between -90 and 90');
     }
@@ -263,32 +270,65 @@ class PanchangService {
   }
 
   /**
-   * Get today's date key for caching (YYYY-MM-DD)
+   * Timezone offset in hours from UTC (e.g. 5.5). Falls back to IST for missing/invalid values.
    */
-  getTodayKey(date) {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  resolveTzone(tzone) {
+    const n = Number(tzone);
+    return tzone !== undefined && tzone !== null && tzone !== '' && Number.isFinite(n) && n >= -12 && n <= 14 ? n : 5.5;
   }
 
   /**
-   * Prepare request data for API (x-www-form-urlencoded format)
-   * Uses current date and time instead of birth details
+   * Calendar date and clock time of `date` as seen in timezone `tzone`.
+   * Independent of the server's own timezone (production servers usually run in UTC).
    */
-  prepareRequestData(currentDate, latitude, longitude) {
-    const date = new Date(currentDate);
-    
+  zonedParts(date, tzone = 5.5) {
+    const shifted = new Date(new Date(date).getTime() + tzone * 3600 * 1000);
     return {
-      day: date.getDate(),
-      month: date.getMonth() + 1,
-      year: date.getFullYear(),
-      hour: date.getHours(),
-      min: date.getMinutes(),
+      year: shifted.getUTCFullYear(),
+      month: shifted.getUTCMonth() + 1,
+      day: shifted.getUTCDate(),
+      hour: shifted.getUTCHours(),
+      min: shifted.getUTCMinutes()
+    };
+  }
+
+  /**
+   * Date key for caching (YYYY-MM-DD) in the given timezone
+   */
+  getTodayKey(date, tzone = 5.5) {
+    const { year, month, day } = this.zonedParts(date, tzone);
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  /**
+   * True when cached coordinates are close enough (~50km) to the requested ones.
+   * Cached docs without a stored location are treated as a match (legacy records).
+   */
+  isSameLocation(cached, latitude, longitude) {
+    if (cached?.latitude == null || cached?.longitude == null) return true;
+    return Math.abs(cached.latitude - parseFloat(latitude)) < 0.5 &&
+           Math.abs(cached.longitude - parseFloat(longitude)) < 0.5;
+  }
+
+  /**
+   * Prepare request data for API (x-www-form-urlencoded format).
+   * A date-only request (UTC midnight, e.g. new Date('2026-01-31')) is calculated at local noon -
+   * midnight is before sunrise and would return the previous day's tithi/nakshatra.
+   */
+  prepareRequestData(currentDate, latitude, longitude, tzone = 5.5) {
+    const d = new Date(currentDate);
+    const dateOnly = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+    const parts = dateOnly ? this.zonedParts(new Date(d.getTime() - tzone * 3600 * 1000 + 12 * 3600 * 1000), tzone) : this.zonedParts(d, tzone);
+
+    return {
+      day: parts.day,
+      month: parts.month,
+      year: parts.year,
+      hour: parts.hour,
+      min: parts.min,
       lat: parseFloat(latitude),
       lon: parseFloat(longitude),
-      tzone: 5.5 // Indian Standard Time, adjust as needed based on location
+      tzone
     };
   }
 

@@ -18,7 +18,8 @@ import {
 } from '../../utils/otp.js';
 import { verifyFirebaseToken, isFirebaseAuthEnabled } from '../../utils/firebaseAuth.js';
 import { getPresignedUrl, generateUploadUrl, extractS3KeyFromUrl } from '../../utils/storage.js';
-import { buildGreeting, extractFirstName, normalizeGreetingLanguage } from '../../utils/voiceGreeting.js';
+import { buildGreeting, buildReturningGreeting, extractFirstName, normalizeGreetingLanguage } from '../../utils/voiceGreeting.js';
+import { getUserChatContext } from '../../services/userChatContext.js';
 
 const router = express.Router();
 
@@ -1782,12 +1783,22 @@ router.get('/greeting', authenticate, async (req, res) => {
     const user = await User.findById(req.user._id).select('profile.name preferredLanguage').lean();
     const language = normalizeGreetingLanguage(req.query.lang || user?.preferredLanguage);
     const firstName = extractFirstName(user?.profile?.name);
+
+    // Returning users get "welcome back" (+ last topic when known); a context failure must never break the greeting
+    let ctx = null;
+    try { ctx = await getUserChatContext(req.user._id); } catch (e) { console.warn('Greeting context error:', e.message); }
+    const greeting = ctx?.hasHistory
+      ? buildReturningGreeting({ fullName: user?.profile?.name, language, topic: ctx.lastTopic, topicLanguage: ctx.lastTopicLanguage, voiceName: 'rashmi1', gender: 'female' })
+      : buildGreeting({ fullName: user?.profile?.name, language, voiceName: 'rashmi1', gender: 'female' });
+
     res.json({
       success: true,
       data: {
         firstName: firstName || null,
         language,
-        greeting: buildGreeting({ fullName: user?.profile?.name, language, voiceName: 'rashmi1', gender: 'female' })
+        returning: Boolean(ctx?.hasHistory),
+        lastTopic: ctx?.lastTopic || null,
+        greeting
       }
     });
   } catch (error) {

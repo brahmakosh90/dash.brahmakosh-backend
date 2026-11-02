@@ -39,6 +39,16 @@ const meditationSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  // Step-by-step guidance for guided sessions: [{ text, textHindi, startSecond, durationSeconds }]
+  instructions: {
+    type: [new mongoose.Schema({
+      text: { type: String, trim: true, required: true },
+      textHindi: { type: String, trim: true, default: '' },
+      startSecond: { type: Number, min: 0, default: null },
+      durationSeconds: { type: Number, min: 0, default: null }
+    }, { _id: false })],
+    default: []
+  },
   imageUrl: {
     type: String,
     trim: true
