@@ -1,12 +1,14 @@
 import axios from 'axios';
 
+const env = (name) => String(process.env[name] ?? '').trim().replace(/^["']|["']$/g, '');
+
 const JSON_BASE_URL = process.env.ASTROLOGY_API_BASE_URL || 'https://json.astrologyapi.com/v1';
-const JSON_USER_ID = process.env.ASTROLOGY_API_USER_ID;
-const JSON_API_KEY = process.env.ASTROLOGY_API_KEY;
+const JSON_USER_ID = env('ASTROLOGY_API_USER_ID');
+const JSON_API_KEY = env('ASTROLOGY_API_KEY');
 
 const PDF_BASE_URL = process.env.ASTROLOGY_PDF_BASE_URL || 'https://pdf.astrologyapi.com/v1';
-const PDF_USER_ID = process.env.ASTROLOGY_PDF_USER_ID;
-const PDF_API_KEY = process.env.ASTROLOGY_PDF_API_KEY;
+const PDF_USER_ID = env('ASTROLOGY_PDF_USER_ID');
+const PDF_API_KEY = env('ASTROLOGY_PDF_API_KEY');
 
 const jsonClient = axios.create({
   baseURL: JSON_BASE_URL,
@@ -14,18 +16,38 @@ const jsonClient = axios.create({
   timeout: Number(process.env.ASTROLOGY_JSON_TIMEOUT_MS || 30000)
 });
 
-// Dedicated PDF credentials use Basic auth; otherwise fall back to the main key via the x-astrologyapi-key header
-const pdfUsesBasicAuth = Boolean(PDF_USER_ID && PDF_API_KEY);
-const pdfHeaderKey = PDF_API_KEY || JSON_API_KEY;
+// PDF API credentials, in the order they are tried. A wrongly set (stale) dedicated PDF key must not block the
+// main key from being used, so a "check the API token key" answer falls through to the next candidate.
+const pdfAuthCandidates = [
+  PDF_USER_ID && PDF_API_KEY && { name: 'pdf-basic', auth: { username: PDF_USER_ID, password: PDF_API_KEY } },
+  PDF_API_KEY && { name: 'pdf-key-header', headers: { 'x-astrologyapi-key': PDF_API_KEY } },
+  JSON_API_KEY && JSON_API_KEY !== PDF_API_KEY && { name: 'main-key-header', headers: { 'x-astrologyapi-key': JSON_API_KEY } },
+  JSON_USER_ID && JSON_API_KEY && { name: 'main-basic', auth: { username: JSON_USER_ID, password: JSON_API_KEY } }
+].filter(Boolean);
+
 const pdfClient = axios.create({
   baseURL: PDF_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    ...(!pdfUsesBasicAuth && pdfHeaderKey ? { 'x-astrologyapi-key': pdfHeaderKey } : {})
-  },
-  auth: pdfUsesBasicAuth ? { username: PDF_USER_ID, password: PDF_API_KEY } : undefined,
-  timeout: Number(process.env.ASTROLOGY_PDF_TIMEOUT_MS || 60000)
+  headers: { 'Content-Type': 'application/json' },
+  timeout: Number(env('ASTROLOGY_PDF_TIMEOUT_MS') || 60000)
 });
+
+// Provider answers HTTP 200 { status:false, msg } when the key is rejected or the plan lacks the PDF API
+const isCredentialRejection = (data) =>
+  data && data.status === false && /token|api key|authori[sz]|subscri|credential/i.test(String(data.msg || ''));
+
+const postPdf = async (endpoint, payload) => {
+  let last = null;
+  for (const candidate of pdfAuthCandidates) {
+    const res = await pdfClient.post(endpoint, payload, { headers: candidate.headers, auth: candidate.auth });
+    if (!isCredentialRejection(res.data)) {
+      if (last) console.log(`[AstrologyPDF] accepted with "${candidate.name}" after ${last.name} was rejected`);
+      return res.data;
+    }
+    console.warn(`[AstrologyPDF] ${endpoint} rejected "${candidate.name}": ${res.data.msg}`);
+    last = { name: candidate.name, data: res.data };
+  }
+  return last.data;
+};
 
 const ensureJsonCreds = () => {
   if (!JSON_API_KEY) {
@@ -36,7 +58,7 @@ const ensureJsonCreds = () => {
 };
 
 const ensurePdfCreds = () => {
-  if (!pdfUsesBasicAuth && !pdfHeaderKey) {
+  if (!pdfAuthCandidates.length) {
     const err = new Error('Astrology PDF API credentials not configured (ASTROLOGY_PDF_API_KEY or ASTROLOGY_API_KEY)');
     err.status = 500;
     throw err;
@@ -72,14 +94,12 @@ export const astrologyExternalService = {
       pro: '/pro_horoscope_pdf/tropical'
     };
     const endpoint = endpointMap[payload.report_type] || '/basic_horoscope_pdf/tropical';
-    const res = await pdfClient.post(endpoint, payload);
-    return res.data;
+    return postPdf(endpoint, payload);
   },
 
   async generateMatchMakingPdf(payload) {
     ensurePdfCreds();
-    const res = await pdfClient.post('/match_making_pdf/tropical', payload);
-    return res.data;
+    return postPdf('/match_making_pdf/tropical', payload);
   }
 };
 
