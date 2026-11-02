@@ -38,7 +38,13 @@ const isCredentialRejection = (data) =>
 const postPdf = async (endpoint, payload) => {
   let last = null;
   for (const candidate of pdfAuthCandidates) {
-    const res = await pdfClient.post(endpoint, payload, { headers: candidate.headers, auth: candidate.auth });
+    // The provider rejects keys with HTTP 401; read that body instead of throwing so the next candidate is tried
+    const res = await pdfClient.post(endpoint, payload, { headers: candidate.headers, auth: candidate.auth, validateStatus: (s) => s < 500 });
+    if (res.status === 401 || isCredentialRejection(res.data) === true || /expired or invalid/i.test(String(res.data?.msg || ''))) {
+      console.warn(`[AstrologyPDF] ${endpoint} rejected "${candidate.name}": ${res.data?.msg}`);
+      last = { name: candidate.name, data: res.data };
+      continue;
+    }
     if (!isCredentialRejection(res.data)) {
       if (last) console.log(`[AstrologyPDF] accepted with "${candidate.name}" after ${last.name} was rejected`);
       return res.data;
