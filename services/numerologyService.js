@@ -13,12 +13,9 @@ class NumerologyService {
     // Create axios instance with authentication
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
-      auth: {
-        username: this.apiUserId,
-        password: this.apiKey
-      },
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'x-astrologyapi-key': this.apiKey
       },
       timeout: 30000
     });

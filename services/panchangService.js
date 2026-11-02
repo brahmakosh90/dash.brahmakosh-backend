@@ -14,11 +14,8 @@ class PanchangService {
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      auth: {
-        username: this.apiUserId,
-        password: this.apiKey
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'x-astrologyapi-key': this.apiKey
       },
       timeout: 30000
     });

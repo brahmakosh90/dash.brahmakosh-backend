@@ -10,8 +10,7 @@ const PDF_API_KEY = process.env.ASTROLOGY_PDF_API_KEY;
 
 const jsonClient = axios.create({
   baseURL: JSON_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-  auth: JSON_USER_ID && JSON_API_KEY ? { username: JSON_USER_ID, password: JSON_API_KEY } : undefined,
+  headers: { 'Content-Type': 'application/json', 'x-astrologyapi-key': JSON_API_KEY },
   timeout: Number(process.env.ASTROLOGY_JSON_TIMEOUT_MS || 30000)
 });
 
@@ -23,8 +22,8 @@ const pdfClient = axios.create({
 });
 
 const ensureJsonCreds = () => {
-  if (!JSON_USER_ID || !JSON_API_KEY) {
-    const err = new Error('Astrology JSON API credentials not configured (ASTROLOGY_API_USER_ID / ASTROLOGY_API_KEY)');
+  if (!JSON_API_KEY) {
+    const err = new Error('Astrology JSON API credentials not configured (ASTROLOGY_API_KEY)');
     err.status = 500;
     throw err;
   }

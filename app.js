@@ -96,6 +96,7 @@ import { seedVoiceConfigs }         from './config/seedVoiceConfigs.js';
 import './services/cronJobs.js';
 
 import { invalidateCacheOnWrite } from './utils/responseCache.js';
+import { brotliBody } from './utils/brotliBody.js';
 startClientNotificationScheduler();
 
 const app    = express();
@@ -140,6 +141,7 @@ app.use((req, res, next) => {
 app.use('/api/user/payment/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
 // ─── Body parsers ─────────────────────────────────────────────────────────────
+app.use(brotliBody()); // body-parser can't decode `Content-Encoding: br`
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

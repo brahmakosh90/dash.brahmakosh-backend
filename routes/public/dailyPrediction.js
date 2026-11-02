@@ -119,11 +119,8 @@ router.post('/daily-prediction', authenticate, async (req, res) => {
       urlEncodedData,
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        auth: {
-          username: process.env.ASTROLOGY_API_USER_ID,
-          password: process.env.ASTROLOGY_API_KEY
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'x-astrologyapi-key': process.env.ASTROLOGY_API_KEY
         },
         timeout: 30000
       }
@@ -275,11 +272,8 @@ router.post('/daily-prediction/simple', authenticate, async (req, res) => {
       urlEncodedData,
       {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        auth: {
-          username: process.env.ASTROLOGY_API_USER_ID,
-          password: process.env.ASTROLOGY_API_KEY
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'x-astrologyapi-key': process.env.ASTROLOGY_API_KEY
         },
         timeout: 30000
       }

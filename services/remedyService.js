@@ -20,11 +20,7 @@ class RemedyService {
 
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
-      headers: { 'Content-Type': 'application/json' },
-      auth: {
-        username: this.apiUserId,
-        password: this.apiKey
-      },
+      headers: { 'Content-Type': 'application/json', 'x-astrologyapi-key': this.apiKey },
       timeout: 30000
     });
   }
