@@ -124,7 +124,7 @@ const sendCampaign = async (campaign) => {
   if (fcmTokens.length === 0) warning = 'Saved in the app inbox. None of the recipients has a push-enabled device yet.';
   else if (pushSkipped) warning = 'Saved in the app inbox, but push was not sent: Firebase is not configured on the server.';
   else if (hasAuthErrors && pushMetrics.sentTokens === 0) warning = `Push failed: Firebase service account credentials are invalid (third-party-auth-error). Regenerate the service account key in Firebase Console and update FIREBASE_SERVICE_ACCOUNT_KEY in .env.`;
-  else if (hasAuthErrors) warning = `${pushMetrics.thirdPartyAuthErrors} token(s) failed due to invalid Firebase credentials. Fix FIREBASE_SERVICE_ACCOUNT_KEY to reach all devices.`;
+  else if (hasAuthErrors) warning = `${pushMetrics.thirdPartyAuthErrors} device token(s) were outdated/expired and have been removed from DB. They will re-register on next app open.`;
   const campaignUpdate = {
     status: allTokensFailed ? 'failed' : 'sent',
     sentAt: now,

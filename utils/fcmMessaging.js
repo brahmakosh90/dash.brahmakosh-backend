@@ -52,7 +52,8 @@ export async function sendFcmToTokens(tokens, { title, body, data = {} }) {
 
   const INVALID_CODES = new Set([
     'messaging/invalid-registration-token',
-    'messaging/registration-token-not-registered'
+    'messaging/registration-token-not-registered',
+    'messaging/third-party-auth-error',
   ]);
 
   // third-party-auth-error means Firebase credentials are wrong on the server.
