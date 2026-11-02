@@ -44,15 +44,21 @@ class AstrologyService {
       // Step 3: Prepare birth data for API
       const birthData = this.prepareBirthData(profile);
 
-      // Step 4: Fetch data from core 4 API endpoints + extended astrology APIs
-      console.log('[Astrology Service] Fetching from core + extended API endpoints...');
-      const [birthDetailsData, astroDetailsData, planetsData, planetsExtendedData, extendedData] = await Promise.all([
-        this.fetchBirthDetails(birthData),
+      // Step 4: Fetch core endpoints — birth_details first (sensitive to concurrency)
+      console.log('[Astrology Service] Fetching core API endpoints...');
+      const birthDetailsData = await this.fetchBirthDetails(birthData);
+      await this.delay(300);
+
+      const [astroDetailsData, planetsData, planetsExtendedData] = await Promise.all([
         this.fetchAstroDetails(birthData),
         this.fetchPlanets(birthData),
         this.fetchPlanetsExtended(birthData),
-        this.fetchAllExtendedAstrologyData(birthData)
       ]);
+      await this.delay(500);
+
+      // Step 5: Fetch extended data in batches
+      console.log('[Astrology Service] Fetching extended API endpoints in batches...');
+      const extendedData = await this.fetchAllExtendedAstrologyData(birthData);
 
       console.log('[Astrology Service] All API calls completed successfully');
 
@@ -140,14 +146,20 @@ class AstrologyService {
    * Endpoint: /birth_details
    */
   async fetchBirthDetails(birthData) {
-    try {
-      console.log('[Astrology Service] Fetching birth_details...');
-      console.log('[Astrology Service] Request data:', JSON.stringify(birthData));
-      const response = await this.apiClient.post('/birth_details', birthData);
-      return response.data;
-    } catch (error) {
-      console.error('[Astrology Service] Birth details error:', error.response?.data || error.message);
-      throw new Error(`Failed to fetch birth details: ${error.message}`);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`[Astrology Service] Fetching birth_details (attempt ${attempt})...`);
+        const response = await this.apiClient.post('/birth_details', birthData);
+        return response.data;
+      } catch (error) {
+        if (error.response?.status === 429 && attempt < 3) {
+          console.warn(`[Astrology Service] birth_details 429, retrying in ${attempt * 1000}ms...`);
+          await this.delay(attempt * 1000);
+        } else {
+          console.error('[Astrology Service] Birth details error:', error.response?.data || error.message);
+          throw new Error(`Failed to fetch birth details: ${error.message}`);
+        }
+      }
     }
   }
 
@@ -360,64 +372,55 @@ class AstrologyService {
     }
   }
 
+  delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
   /**
-   * Fetch all extended astrology data (runs in parallel, individual failures don't break flow)
+   * Fetch all extended astrology data in sequential batches to avoid 429 rate limit
    */
   async fetchAllExtendedAstrologyData(birthData) {
-    const planets = ['sun', 'moon', 'mars', 'mercury', 'jupiter', 'venus', 'saturn', 'rahu', 'ketu'];
-    const planetAshtakPromises = planets.map(p => this.fetchPlanetAshtak(birthData, p).then(data => ({ planet: p, data })));
-
-    const [
-      ghatChakra,
-      ayanamsha,
-      bhavMadhya,
-      planetNature,
-      panchadaMaitri,
-      ...planetAshtakResults
-    ] = await Promise.all([
+    // Batch 1: basic extended data (5 calls)
+    const [ghatChakra, ayanamsha, bhavMadhya, planetNature, panchadaMaitri] = await Promise.all([
       this.fetchGhatChakra(birthData),
       this.fetchAyanamsha(birthData),
       this.fetchBhavMadhya(birthData),
       this.fetchPlanetNature(birthData),
       this.fetchPanchadaMaitri(birthData),
-      ...planetAshtakPromises
     ]);
+    await this.delay(500);
 
-    const [sarvashtak, currentVdasha, currentVdashaAll, majorVdasha, currentChardasha, majorChardasha, currentYoginiDasha, sadhesatiLifeDetails, pitraDoshaReport, gemstoneSuggestion] = await Promise.all([
+    // Batch 2: planet ashtak (9 calls) in 3 groups of 3
+    const planetGroups = [['sun','moon','mars'], ['mercury','jupiter','venus'], ['saturn','rahu','ketu']];
+    const planetAshtak = {};
+    for (const group of planetGroups) {
+      const results = await Promise.all(group.map(p => this.fetchPlanetAshtak(birthData, p).then(data => ({ planet: p, data }))));
+      results.forEach(({ planet, data }) => { if (data) planetAshtak[planet] = data; });
+      await this.delay(400);
+    }
+
+    // Batch 3: dasha & other data (5 calls)
+    const [sarvashtak, currentVdasha, currentVdashaAll, majorVdasha, currentChardasha] = await Promise.all([
       this.fetchSarvashtak(birthData),
       this.fetchCurrentVdasha(birthData),
       this.fetchCurrentVdashaAll(birthData),
       this.fetchMajorVdasha(birthData),
       this.fetchCurrentChardasha(birthData),
+    ]);
+    await this.delay(400);
+
+    // Batch 4: remaining (5 calls)
+    const [majorChardasha, currentYoginiDasha, sadhesatiLifeDetails, pitraDoshaReport, gemstoneSuggestion] = await Promise.all([
       this.fetchMajorChardasha(birthData),
       this.fetchCurrentYoginiDasha(birthData),
       this.fetchSadhesatiLifeDetails(birthData),
       this.fetchPitraDoshaReport(birthData),
-      this.fetchGemstoneSuggestion(birthData)
+      this.fetchGemstoneSuggestion(birthData),
     ]);
 
-    const planetAshtak = {};
-    planetAshtakResults.forEach(({ planet, data }) => {
-      if (data) planetAshtak[planet] = data;
-    });
-
     return {
-      ghatChakra,
-      ayanamsha,
-      bhavMadhya,
-      planetNature,
-      panchadaMaitri,
+      ghatChakra, ayanamsha, bhavMadhya, planetNature, panchadaMaitri,
       planetAshtak: Object.keys(planetAshtak).length ? planetAshtak : null,
-      sarvashtak,
-      currentVdasha,
-      currentVdashaAll,
-      majorVdasha,
-      currentChardasha,
-      majorChardasha,
-      currentYoginiDasha,
-      sadhesatiLifeDetails,
-      pitraDoshaReport,
-      gemstoneSuggestion
+      sarvashtak, currentVdasha, currentVdashaAll, majorVdasha, currentChardasha,
+      majorChardasha, currentYoginiDasha, sadhesatiLifeDetails, pitraDoshaReport, gemstoneSuggestion
     };
   }
 
