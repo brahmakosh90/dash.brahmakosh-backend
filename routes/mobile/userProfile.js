@@ -19,6 +19,7 @@ import {
 import { verifyFirebaseToken, isFirebaseAuthEnabled } from '../../utils/firebaseAuth.js';
 import { getPresignedUrl, generateUploadUrl, extractS3KeyFromUrl } from '../../utils/storage.js';
 import { buildGreeting, buildReturningGreeting, extractFirstName, normalizeGreetingLanguage } from '../../utils/voiceGreeting.js';
+import { cacheGet, invalidateTag } from '../../utils/responseCache.js';
 import { getUserChatContext } from '../../services/userChatContext.js';
 
 const router = express.Router();
@@ -1497,7 +1498,7 @@ router.post('/login', async (req, res) => {
  * GET /api/mobile/user/profile
  * Headers: Authorization: Bearer <token>
  */
-router.get('/profile', authenticate, async (req, res) => {
+router.get('/profile', authenticate, cacheGet({ ttlSeconds: 120, tag: 'userprofile', perUser: true }), async (req, res) => {
   try {
     if (req.user.role !== 'user') {
       return res.status(403).json({ 
@@ -1507,8 +1508,6 @@ router.get('/profile', authenticate, async (req, res) => {
     }
 
     const user = await User.findById(req.user._id)
-      .select('-password')
-      .populate('clientId', 'clientId businessName email');
     
     if (!user) {
       return res.status(404).json({ 
@@ -1664,6 +1663,7 @@ router.put('/profile', authenticate, async (req, res) => {
 
     await user.save();
     await normalizeStoredProfileImageToKey(user);
+    invalidateTag('userprofile');
 
     // Refresh astrology data when birth details are updated
     const birthFieldsUpdated = req.body.dob || req.body.timeOfBirth ||

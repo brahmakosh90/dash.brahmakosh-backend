@@ -10,8 +10,8 @@
  * - Browsers still revalidate (ETag -> 304), so the payload is skipped when nothing changed.
  */
 
-const MAX_ENTRIES = 500;
-const MAX_BODY_BYTES = 1024 * 1024; // don't hold huge payloads in memory
+const MAX_ENTRIES = 2000;
+const MAX_BODY_BYTES = 2 * 1024 * 1024; // don't hold huge payloads in memory
 
 const store = new Map(); // url -> { body, tag, expires }
 

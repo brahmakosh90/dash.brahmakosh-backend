@@ -273,7 +273,7 @@ function getActivityRoute(title) {
  * GET /api/mobile/testimonials?clientId=<clientId>
  * Get all testimonials for a specific client (for mobile app)
  */
-router.get('/testimonials', cacheGet({ ttlSeconds: 60, tag: 'testimonial' }), async (req, res) => {
+router.get('/testimonials', cacheGet({ ttlSeconds: 300, tag: 'testimonial' }), async (req, res) => {
   try {
     const { clientId } = req.query;
 
@@ -371,7 +371,7 @@ router.get('/testimonials/:id', async (req, res) => {
  * GET /api/mobile/founder-messages?clientId=<clientId>
  * Get all founder messages for a specific client (for mobile app)
  */
-router.get('/founder-messages', cacheGet({ ttlSeconds: 60, tag: 'founder' }), async (req, res) => {
+router.get('/founder-messages', cacheGet({ ttlSeconds: 300, tag: 'founder' }), async (req, res) => {
   try {
     const { clientId } = req.query;
 
@@ -468,7 +468,7 @@ router.get('/founder-messages/:id', async (req, res) => {
  * GET /api/mobile/brand-assets?clientId=<clientId>
  * Get all brand assets for a specific client (for mobile app)
  */
-router.get('/brand-assets', cacheGet({ ttlSeconds: 60, tag: 'brand' }), async (req, res) => {
+router.get('/brand-assets', cacheGet({ ttlSeconds: 300, tag: 'brand' }), async (req, res) => {
   try {
     const { clientId } = req.query;
 
@@ -652,7 +652,7 @@ router.post('/media/resolve', authenticateToken, async (req, res) => {
  * GET /api/mobile/content/meditations?clientId=<clientId>[&category=<name>]
  * Meditations with signed audio/video/image URLs. Blank categories are served as "General".
  */
-router.get('/meditations', cacheGet({ ttlSeconds: 60, tag: 'meditation' }), async (req, res) => {
+router.get('/meditations', cacheGet({ ttlSeconds: 300, tag: 'meditation' }), async (req, res) => {
   try {
     const clientId = requireClientId(req, res);
     if (!clientId) return;
@@ -674,7 +674,7 @@ router.get('/meditations', cacheGet({ ttlSeconds: 60, tag: 'meditation' }), asyn
  * GET /api/mobile/content/meditations/categories?clientId=<clientId>
  * Categories that actually contain active meditations, with counts (never an empty/blank name).
  */
-router.get('/meditations/categories', cacheGet({ ttlSeconds: 60, tag: 'meditation' }), async (req, res) => {
+router.get('/meditations/categories', cacheGet({ ttlSeconds: 300, tag: 'meditation' }), async (req, res) => {
   try {
     const clientId = requireClientId(req, res);
     if (!clientId) return;
@@ -724,7 +724,7 @@ router.get('/meditations/:id', async (req, res) => {
  * GET /api/mobile/content/chantings?clientId=<clientId>[&lang=hi|en]
  * Chantings with the mantra text in the requested language plus signed audio/video/image URLs.
  */
-router.get('/chantings', cacheGet({ ttlSeconds: 60, tag: 'chanting' }), async (req, res) => {
+router.get('/chantings', cacheGet({ ttlSeconds: 300, tag: 'chanting' }), async (req, res) => {
   try {
     const clientId = requireClientId(req, res);
     if (!clientId) return;

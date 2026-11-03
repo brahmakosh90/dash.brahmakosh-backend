@@ -6,6 +6,8 @@ import Client from '../../models/Client.js';
 import { authenticate } from '../../middleware/auth.js';
 import { withSignedMedia } from '../../utils/mediaUrls.js';
 
+import { cacheGet } from '../../utils/responseCache.js';
+
 const router = express.Router();
 
 /**
@@ -52,7 +54,7 @@ const readingMinutes = (lesson, lang) => {
 
 router.use(authenticate, userOnly);
 
-router.get('/', async (req, res) => {
+router.get('/', cacheGet({ ttlSeconds: 300, tag: 'courses', perUser: true }), async (req, res) => {
   try {
     const lang = pickLang(req);
     const clientId = await resolveUserClientObjectId(req);

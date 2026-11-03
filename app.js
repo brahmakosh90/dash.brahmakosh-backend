@@ -162,6 +162,8 @@ app.use(invalidateCacheOnWrite({
   '/api/puja-padhati':   'puja',
   '/api/admin':          '*',
   '/api/client':         '*',
+  '/api/mobile/courses': 'courses',
+  '/api/mobile/user/profile': 'userprofile',
 }));
 
 // ─── Static files ─────────────────────────────────────────────────────────────
