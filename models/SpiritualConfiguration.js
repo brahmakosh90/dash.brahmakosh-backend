@@ -60,6 +60,14 @@ const spiritualConfigurationSchema = new mongoose.Schema({
   categoryId: {
     type: String,
     default: ''
+  },
+  audioUrl: {
+    type: String,
+    default: null
+  },
+  audioKey: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

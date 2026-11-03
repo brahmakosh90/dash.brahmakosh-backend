@@ -179,6 +179,8 @@ const updateConfiguration = async (req, res) => {
     if (categoryId !== undefined) updateData.categoryId = categoryId;
     if (category !== undefined) updateData.category = category;
     if (subcategory !== undefined) updateData.subcategory = subcategory;
+    if (req.body.audioUrl !== undefined) updateData.audioUrl = req.body.audioUrl;
+    if (req.body.audioKey !== undefined) updateData.audioKey = req.body.audioKey;
 
     const configuration = await SpiritualConfiguration.findOneAndUpdate(
       { _id: id, isDeleted: false },
