@@ -157,14 +157,18 @@ app.use(invalidateCacheOnWrite({
   '/api/chapters':       'chapters',
   '/api/shlokas':        'shlokas',
   '/api/prathanas':      'prathanas',
-  '/api/spiritual-activities': 'activities',
+  '/api/spiritual-activities': ['activities', 'checkin'],
   '/api/spiritual-clips': 'clips',
   '/api/puja-padhati':   'puja',
   '/api/admin':          '*',
   '/api/client':         '*',
   '/api/mobile/courses': 'courses',
   '/api/mobile/user/profile': 'userprofile',
-  '/api/mobile/spiritual-checkin': 'checkin',
+  // The check-in page shows sessions, streak and karma: anything that changes them must drop the cached page
+  '/api/spiritual-stats':     'checkin',
+  '/api/user-sankalp':        'checkin',
+  '/api/reward-redemptions':  'checkin',
+  '/api/karma-points':        'checkin',
 }));
 
 // ─── Static files ─────────────────────────────────────────────────────────────

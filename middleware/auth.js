@@ -3,6 +3,7 @@ import Admin from '../models/Admin.js';
 import Client from '../models/Client.js';
 import User from '../models/User.js';
 import Partner from '../models/Partner.js';
+import { getCachedUser, setCachedUser } from '../utils/responseCache.js';
 
 
 // Per-request success logs were synchronous stdout writes on every authenticated call (and printed emails).
@@ -61,18 +62,20 @@ export const authenticate = async (req, res, next) => {
         });
       }
     } else if (decoded.role === 'user') {
-      user = await User.findById(decoded.userId)
-        .select('-password')
-        .populate('clientId', 'clientId businessName email');
-      if (user) {
-        user.role = 'user'; // Ensure role is set
-        // Convert to plain object to ensure role is preserved
-        user = user.toObject ? user.toObject() : user;
-        user.role = 'user'; // Set role again after conversion
-        
-        // Add clientId from token for backward compatibility
-        if (decoded.clientId) {
-          user.tokenClientId = decoded.clientId;
+      // Check user cache first to avoid DB hit on every request
+      const cached = getCachedUser(token);
+      if (cached) {
+        // Copy: handlers and the role fix-ups below mutate req.user, which must not leak to other requests
+        user = { ...cached };
+      } else {
+        user = await User.findById(decoded.userId)
+          .select('-password')
+          .populate('clientId', 'clientId businessName email');
+        if (user) {
+          user = user.toObject ? user.toObject() : user;
+          user.role = 'user';
+          if (decoded.clientId) user.tokenClientId = decoded.clientId;
+          setCachedUser(token, user);
         }
       }
     } else if (decoded.role === 'partner') {

@@ -43,14 +43,36 @@ router.get('/spiritual-checkin', authenticateToken, cacheGet({ ttlSeconds: 60, t
 
     // All of these reads are independent: start them together. Run one after another, each cost a full round
     // trip to the database (this endpoint did 5-6 in a row, which is why it was the slowest API).
-    const [clientActivities, sessions, currentUser, bonusTransactions, redemptions] = await Promise.all([
+    // Totals are summed by the database over ALL of the user's records (a fetch capped at N rows would silently
+    // under-count heavy users); only the 10 recent sessions and the createdAt dates for the streak are fetched.
+    const uid = new mongoose.Types.ObjectId(String(userId));
+    const [clientActivities, recentSessions, sessionDates, typeTotals, currentUser, bonusAgg, redeemAgg] = await Promise.all([
       clientId
         ? SpiritualActivity.find({ clientId: clientId, isActive: true, isDeleted: false }).sort({ createdAt: -1 })
         : Promise.resolve([]),
-      SpiritualSession.find({ userId }).sort({ createdAt: -1 }).limit(200).lean(),
+      SpiritualSession.find({ userId }).sort({ createdAt: -1 }).limit(10).lean(),
+      SpiritualSession.find({ userId }).sort({ createdAt: -1 }).limit(2000).select('createdAt').lean(),
+      SpiritualSession.aggregate([
+        { $match: { userId: uid } },
+        { $group: {
+          _id: { $ifNull: ['$type', 'meditation'] },
+          sessions: { $sum: 1 },
+          // stored status wins; otherwise 100% completion counts as completed (same rule the app has always used)
+          completed: { $sum: { $cond: [{ $eq: [{ $ifNull: ['$status', { $cond: [{ $gte: ['$completionPercentage', 100] }, 'completed', 'other'] }] }, 'completed'] }, 1, 0] } },
+          minutes: { $sum: { $cond: [{ $eq: ['$type', 'chanting'] }, 0, { $ifNull: ['$actualDuration', 0] }] } },
+          karmaPoints: { $sum: { $ifNull: ['$karmaPoints', 0] } },
+          completionSum: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$completionPercentage', 0] }, 0] }, '$completionPercentage', 100] } }
+        } }
+      ]),
       User.findById(userId).select('karmaPoints').lean(),
-      KarmaPointsTransaction.find({ userId }).select('amount').lean(),
-      RewardRedemption.find({ userId, status: 'completed' }).select('karmaPointsSpent').lean()
+      KarmaPointsTransaction.aggregate([
+        { $match: { userId: uid } },
+        { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$amount' } } }
+      ]),
+      RewardRedemption.aggregate([
+        { $match: { userId: uid, status: 'completed' } },
+        { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$karmaPointsSpent' } } }
+      ])
     ]);
 
     let activities = clientActivities;
@@ -95,30 +117,30 @@ router.get('/spiritual-checkin', authenticateToken, cacheGet({ ttlSeconds: 60, t
     // Use User.karmaPoints as source of truth (includes activities + sankalp + bonus - spent)
     const totalKarmaPoints = currentUser?.karmaPoints || 0;
     
-    // Calculate comprehensive stats
-    const totalSessions = sessions.length;
-    const totalKarmaFromActivities = sessions.reduce((sum, session) => sum + (session.karmaPoints || 0), 0);
-    
-    const totalBonusPoints = bonusTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-    
-    const totalSpentPoints = redemptions.reduce((sum, r) => sum + (r.karmaPointsSpent || 0), 0);
-    const completedSessions = sessions.filter(s => {
-      const sessionStatus = s.status || (s.completionPercentage >= 100 ? 'completed' : 
-                            s.completionPercentage >= 50 ? 'incomplete' : 'interrupted');
-      return sessionStatus === 'completed';
-    }).length;
-    const totalMinutes = sessions.reduce((sum, session) => {
-      return sum + (session.type !== 'chanting' ? (session.actualDuration || 0) : 0);
-    }, 0);
-    const averageCompletion = sessions.length > 0 ? 
-      sessions.reduce((sum, session) => sum + (session.completionPercentage || 100), 0) / sessions.length : 0;
-    
+    // Comprehensive stats, from the database totals
+    let totalSessions = 0;
+    let completedSessions = 0;
+    let totalMinutes = 0;
+    let completionSum = 0;
+    typeTotals.forEach(t => {
+      totalSessions += t.sessions;
+      completedSessions += t.completed;
+      totalMinutes += t.minutes;
+      completionSum += t.completionSum;
+    });
+    const averageCompletion = totalSessions > 0 ? completionSum / totalSessions : 0;
+
+    const bonusCount = bonusAgg[0]?.count || 0;
+    const totalBonusPoints = bonusAgg[0]?.total || 0;
+    const redemptionCount = redeemAgg[0]?.count || 0;
+    const totalSpentPoints = redeemAgg[0]?.total || 0;
+
     // Calculate streak (consecutive days with sessions)
     let currentStreak = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const uniqueDates = [...new Set(sessions.map(session => {
+    const uniqueDates = [...new Set(sessionDates.map(session => {
       const date = new Date(session.createdAt);
       date.setHours(0, 0, 0, 0);
       return date.getTime();
@@ -135,47 +157,30 @@ router.get('/spiritual-checkin', authenticateToken, cacheGet({ ttlSeconds: 60, t
       }
     }
     
-    // Calculate category-wise stats
+    // Category-wise stats
     const categoryStats = {};
-    sessions.forEach(session => {
-      const category = session.type || 'meditation';
-      if (!categoryStats[category]) {
-        categoryStats[category] = {
-          sessions: 0,
-          completed: 0,
-          minutes: 0,
-          karmaPoints: 0
-        };
-      }
-      categoryStats[category].sessions++;
-      
-      const sessionStatus = session.status || 
-        (session.completionPercentage >= 100 ? 'completed' : 
-         session.completionPercentage >= 50 ? 'incomplete' : 'interrupted');
-      
-      if (sessionStatus === 'completed') {
-        categoryStats[category].completed++;
-      }
-      
-      if (session.type !== 'chanting') {
-        categoryStats[category].minutes += session.actualDuration || 0;
-      }
-      categoryStats[category].karmaPoints += session.karmaPoints || 0;
+    typeTotals.forEach(t => {
+      categoryStats[t._id] = {
+        sessions: t.sessions,
+        completed: t.completed,
+        minutes: t.minutes,
+        karmaPoints: t.karmaPoints
+      };
     });
     
     // Add bonus and redemption stats to categoryStats
     categoryStats.bonus = {
-      count: bonusTransactions.length,
+      count: bonusCount,
       totalBonusPoints: totalBonusPoints
     };
     
     categoryStats.redemption = {
-      count: redemptions.length,
+      count: redemptionCount,
       totalRedeemPoints: totalSpentPoints
     };
     
     // Get recent activities (last 10)
-    const recentActivities = sessions.slice(0, 10).map(session => {
+    const recentActivities = recentSessions.map(session => {
       const completionPercentage = session.completionPercentage !== undefined ? session.completionPercentage :
                                   (session.targetDuration > 0 ? Math.round((session.actualDuration / session.targetDuration) * 100) : 100);
       

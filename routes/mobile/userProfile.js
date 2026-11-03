@@ -19,7 +19,7 @@ import {
 import { verifyFirebaseToken, isFirebaseAuthEnabled } from '../../utils/firebaseAuth.js';
 import { getPresignedUrl, generateUploadUrl, extractS3KeyFromUrl } from '../../utils/storage.js';
 import { buildGreeting, buildReturningGreeting, extractFirstName, normalizeGreetingLanguage } from '../../utils/voiceGreeting.js';
-import { cacheGet, invalidateTag } from '../../utils/responseCache.js';
+import { cacheGet, invalidateTag, invalidateCachedUser } from '../../utils/responseCache.js';
 import { getUserChatContext } from '../../services/userChatContext.js';
 
 const router = express.Router();
@@ -1664,6 +1664,7 @@ router.put('/profile', authenticate, async (req, res) => {
     await user.save();
     await normalizeStoredProfileImageToKey(user);
     invalidateTag('userprofile');
+    invalidateCachedUser(user._id);
 
     // Refresh astrology data when birth details are updated
     const birthFieldsUpdated = req.body.dob || req.body.timeOfBirth ||

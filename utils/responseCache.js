@@ -11,9 +11,32 @@
  */
 
 const MAX_ENTRIES = 2000;
-const MAX_BODY_BYTES = 2 * 1024 * 1024; // don't hold huge payloads in memory
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
-const store = new Map(); // url -> { body, tag, expires }
+const store = new Map();
+
+// Short-lived auth user cache — avoids a DB hit on every authenticated request.
+// Key = JWT token string, value = { user, expires }. TTL = 30s (safe: token still validated by JWT).
+const userStore = new Map();
+const USER_CACHE_TTL = 30 * 1000;
+
+export const getCachedUser = (token) => {
+  const hit = userStore.get(token);
+  if (hit && hit.expires > Date.now()) return hit.user;
+  userStore.delete(token);
+  return null;
+};
+
+export const setCachedUser = (token, user) => {
+  if (userStore.size >= 5000) userStore.delete(userStore.keys().next().value);
+  userStore.set(token, { user, expires: Date.now() + USER_CACHE_TTL });
+};
+
+export const invalidateCachedUser = (userId) => {
+  for (const [token, entry] of userStore) {
+    if (String(entry.user?._id) === String(userId)) userStore.delete(token);
+  }
+};
 
 const evictIfFull = () => {
   while (store.size >= MAX_ENTRIES) store.delete(store.keys().next().value);
@@ -33,10 +56,12 @@ export const cacheGet = ({ ttlSeconds = 60, tag, perUser = false }) => (req, res
   if (req.method !== 'GET') return next();
   if (perUser && !req.user?._id) return next();
 
+  // Per-user bodies must never be stored by a shared cache (CDN / proxy): only the caller's own browser may keep them
+  const cacheControl = `${perUser ? 'private' : 'public'}, max-age=0, must-revalidate`;
   const key = perUser ? `${req.user.role}:${req.user._id}|${req.originalUrl}` : req.originalUrl;
   const hit = store.get(key);
   if (hit && hit.expires > Date.now()) {
-    res.set({ 'X-Cache': 'HIT', 'Cache-Control': 'public, max-age=0, must-revalidate' });
+    res.set({ 'X-Cache': 'HIT', 'Cache-Control': cacheControl });
     return res.type('json').send(hit.body);
   }
 
@@ -49,22 +74,22 @@ export const cacheGet = ({ ttlSeconds = 60, tag, perUser = false }) => (req, res
         store.set(key, { body, tag, expires: Date.now() + ttlSeconds * 1000 });
       }
     }
-    res.set({ 'X-Cache': 'MISS', 'Cache-Control': 'public, max-age=0, must-revalidate' });
+    res.set({ 'X-Cache': 'MISS', 'Cache-Control': cacheControl });
     return sendJson(payload);
   };
   next();
 };
 
 /**
- * Clears a tag after any successful write under a URL prefix, e.g.
- *   app.use(invalidateCacheOnWrite({ '/api/swapna-decoder': 'swapna' }));
+ * Clears a tag (or a list of tags) after any successful write under a URL prefix, e.g.
+ *   app.use(invalidateCacheOnWrite({ '/api/swapna-decoder': 'swapna', '/api/spiritual-activities': ['activities', 'checkin'] }));
  */
 export const invalidateCacheOnWrite = (prefixToTag) => (req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   res.on('finish', () => {
     if (res.statusCode >= 400) return;
-    for (const [prefix, tag] of Object.entries(prefixToTag)) {
-      if (req.originalUrl.startsWith(prefix)) invalidateTag(tag);
+    for (const [prefix, tags] of Object.entries(prefixToTag)) {
+      if (req.originalUrl.startsWith(prefix)) [].concat(tags).forEach(invalidateTag);
     }
   });
   next();
