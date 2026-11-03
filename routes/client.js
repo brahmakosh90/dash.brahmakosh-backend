@@ -2573,15 +2573,17 @@ const kundaliReportHandler = async (req, res) => {
 
     // Deduct credits before generating report
     const creditCost = REPORT_CREDIT_COSTS[`kundali_${rt}`];
-    const deduction = await deductCredits({
-      userId,
-      amount: creditCost,
-      description: `Kundali ${rt} PDF report generation`,
-      reportType: `kundali_${rt}`,
-    });
-    chargedAmount = creditCost;
-    chargedUserId = userId;
-    chargedType = rt;
+    // CREDITS TEMPORARILY DISABLED FOR TESTING
+    const deduction = { newBalance: 0 };
+    // const deduction = await deductCredits({
+    //   userId,
+    //   amount: creditCost,
+    //   description: `Kundali ${rt} PDF report generation`,
+    //   reportType: `kundali_${rt}`,
+    // });
+    // chargedAmount = creditCost;
+    // chargedUserId = userId;
+    // chargedType = rt;
 
     // 1) Call AstrologyAPI PDF endpoint
     const data = await astrologyExternalService.generateKundaliPdf(payload);
