@@ -56,8 +56,10 @@ export const cacheGet = ({ ttlSeconds = 60, tag, perUser = false }) => (req, res
   if (req.method !== 'GET') return next();
   if (perUser && !req.user?._id) return next();
 
-  // Per-user bodies must never be stored by a shared cache (CDN / proxy): only the caller's own browser may keep them
-  const cacheControl = `${perUser ? 'private' : 'public'}, max-age=0, must-revalidate`;
+  // Per-user: private, no CDN. Public: allow browser + CDN to cache for ttlSeconds
+  const cacheControl = perUser
+    ? 'private, max-age=0, must-revalidate'
+    : `public, max-age=${ttlSeconds}, stale-while-revalidate=60`;
   const key = perUser ? `${req.user.role}:${req.user._id}|${req.originalUrl}` : req.originalUrl;
   const hit = store.get(key);
   if (hit && hit.expires > Date.now()) {

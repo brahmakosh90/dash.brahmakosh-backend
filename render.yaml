@@ -4,3 +4,22 @@ services:
     env: node
     buildCommand: npm install
     startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+    headers:
+      - path: /api/*
+        name: Cache-Control
+        value: no-store
+      - path: /api/puja-padhati
+        name: Cache-Control
+        value: public, max-age=600, stale-while-revalidate=60
+      - path: /api/meditations
+        name: Cache-Control
+        value: public, max-age=600, stale-while-revalidate=60
+      - path: /api/chantings
+        name: Cache-Control
+        value: public, max-age=600, stale-while-revalidate=60
+      - path: /api/spiritual-activities
+        name: Cache-Control
+        value: public, max-age=600, stale-while-revalidate=60
