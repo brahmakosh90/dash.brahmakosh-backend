@@ -13,10 +13,8 @@ class NumerologyService {
     // Create axios instance with authentication
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-astrologyapi-key': this.apiKey
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      auth: { username: this.apiUserId, password: this.apiKey },
       timeout: 30000
     });
   }
@@ -160,7 +158,13 @@ class NumerologyService {
     // API call: send DOB (day, month, year) + name, not prediction date
     const { day: dobDay, month: dobMonth, year: dobYear } = this.extractDateComponents(userDob);
     console.log('[Numerology Service] Fetching daily prediction with DOB:', `${dobYear}-${dobMonth}-${dobDay}`);
-    const dailyPrediction = await this.callNumeroAPI('/numero_prediction/daily', dobDay, dobMonth, dobYear, trimmedName);
+    let dailyPrediction;
+    try {
+      dailyPrediction = await this.callNumeroAPI('/numero_prediction/daily', dobDay, dobMonth, dobYear, trimmedName);
+    } catch (err) {
+      console.warn('[Numerology Service] daily prediction unavailable (plan limit):', err.message);
+      return { source: 'unavailable', data: { missingFields: [], message: 'Daily prediction not available in current plan' } };
+    }
 
     await Numerology.findOneAndUpdate(
       { userId, day: pdDay, month: pdMonth, year: pdYear },
