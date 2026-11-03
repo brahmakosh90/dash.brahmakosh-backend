@@ -37,6 +37,7 @@ router.get('/', cacheGet({ ttlSeconds: 120, tag: 'puja' }), async (req, res) => 
     
     const pujas = await PujaPadhati.find(filter)
       .sort({ sortOrder: 1, createdAt: -1 })
+      .select('-pujaVidhi -samagriList -mantras -specialInstructions -muhurat -audioUrl -audioKey -videoUrl -videoKey')
       .lean();
     
     // Fresh signed URLs for thumbnail, audio and video (resolved from the stored key, or from our own storage URL)
