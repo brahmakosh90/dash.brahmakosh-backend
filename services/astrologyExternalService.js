@@ -27,8 +27,8 @@ const pdfAuthCandidates = [
 
 const pdfClient = axios.create({
   baseURL: PDF_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: Number(env('ASTROLOGY_PDF_TIMEOUT_MS') || 60000)
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  timeout: Number(env('ASTROLOGY_PDF_TIMEOUT_MS') || 90000)
 });
 
 // Provider answers HTTP 200 { status:false, msg } when the key is rejected or the plan lacks the PDF API
@@ -36,10 +36,13 @@ const isCredentialRejection = (data) =>
   data && data.status === false && /token|api key|authori[sz]|subscri|credential/i.test(String(data.msg || ''));
 
 const postPdf = async (endpoint, payload) => {
+  // API requires application/x-www-form-urlencoded
+  const formData = new URLSearchParams();
+  Object.entries(payload).forEach(([k, v]) => { if (v !== undefined && v !== null) formData.append(k, String(v)); });
+
   let last = null;
   for (const candidate of pdfAuthCandidates) {
-    // The provider rejects keys with HTTP 401; read that body instead of throwing so the next candidate is tried
-    const res = await pdfClient.post(endpoint, payload, { headers: candidate.headers, auth: candidate.auth, validateStatus: (s) => s < 500 });
+    const res = await pdfClient.post(endpoint, formData.toString(), { headers: candidate.headers, auth: candidate.auth, validateStatus: (s) => s < 500 });
     if (res.status === 401 || isCredentialRejection(res.data) === true || /expired or invalid/i.test(String(res.data?.msg || ''))) {
       console.warn(`[AstrologyPDF] ${endpoint} rejected "${candidate.name}": ${res.data?.msg}`);
       last = { name: candidate.name, data: res.data };
@@ -95,11 +98,11 @@ export const astrologyExternalService = {
   async generateKundaliPdf(payload) {
     ensurePdfCreds();
     const endpointMap = {
-      mini: '/mini_horoscope_pdf/tropical',
-      basic: '/basic_horoscope_pdf/tropical',
-      pro: '/pro_horoscope_pdf/tropical'
+      mini: '/mini_horoscope_pdf',
+      basic: '/basic_horoscope_pdf',
+      pro: '/pro_horoscope_pdf'
     };
-    const endpoint = endpointMap[payload.report_type] || '/basic_horoscope_pdf/tropical';
+    const endpoint = endpointMap[payload.report_type] || '/basic_horoscope_pdf';
     return postPdf(endpoint, payload);
   },
 
