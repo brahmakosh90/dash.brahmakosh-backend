@@ -61,6 +61,18 @@ export const withSignedMedia = async (doc, kinds = MEDIA_KINDS, ttl = MEDIA_URL_
   return obj;
 };
 
+/**
+ * Signs a single stored value that may be a storage key, a URL of our own bucket, or a third-party URL
+ * (Archive.org, Wikimedia, YouTube...). Third-party URLs are playable as stored and are returned untouched;
+ * signing them produced a link to a non-existent object. Never throws: on failure the stored value is kept.
+ */
+export const signStoredMedia = async (value, ttl = MEDIA_URL_TTL_SECONDS) => {
+  if (typeof value !== 'string' || !value.trim()) return value;
+  const v = value.trim();
+  if (/^https?:\/\//i.test(v) && !isOwnStorageUrl(v)) return v;
+  return (await signKey(v, ttl)) || value;
+};
+
 /** Batch version for arbitrary keys: returns { [key]: signedUrl | null } */
 export const signKeys = async (keys, ttl = MEDIA_URL_TTL_SECONDS) => {
   const unique = [...new Set(keys.filter((k) => typeof k === 'string' && k.trim()))];

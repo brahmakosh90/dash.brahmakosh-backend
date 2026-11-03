@@ -4,6 +4,7 @@ import multer from 'multer';
 import Shloka from '../models/Shloka.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 import { getPresignedUrl, generateUploadUrl, uploadBuffer, extractS3KeyFromUrl } from '../utils/storage.js';
+import { signStoredMedia } from '../utils/mediaUrls.js';
 
 import { cacheGet } from '../utils/responseCache.js';
 const router = express.Router();
@@ -20,7 +21,7 @@ const uploadAudio = multer({
 const withSignedUrl = async (shloka) => {
   const obj = shloka.toObject ? shloka.toObject() : { ...shloka };
   if (obj.audioUrl) {
-    try { obj.audioUrl = await getPresignedUrl(obj.audioUrl); } catch {}
+    obj.audioUrl = await signStoredMedia(obj.audioUrl);
   }
   return obj;
 };

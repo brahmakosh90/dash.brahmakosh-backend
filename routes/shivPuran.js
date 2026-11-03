@@ -4,6 +4,7 @@ import ShivPuran from '../models/ShivPuran.js';
 import ShivPuranVerse from '../models/ShivPuranVerse.js';
 import { authenticate } from '../middleware/auth.js';
 import { uploadFile, getPresignedUrl } from '../utils/storage.js';
+import { signStoredMedia } from '../utils/mediaUrls.js';
 
 const router = express.Router();
 
@@ -40,10 +41,10 @@ const getClientId = async (user) => {
 const withSignedUrl = async (doc) => {
   const obj = doc.toObject ? doc.toObject() : doc;
   if (obj.imageUrl) {
-    try { obj.imageUrl = await getPresignedUrl(obj.imageUrl); } catch {}
+    obj.imageUrl = await signStoredMedia(obj.imageUrl);
   }
   if (obj.audioUrl) {
-    try { obj.audioUrl = await getPresignedUrl(obj.audioUrl); } catch {}
+    obj.audioUrl = await signStoredMedia(obj.audioUrl);
   }
   return obj;
 };

@@ -1,6 +1,7 @@
 import express from 'express';
 import SwapnaDecoder from '../models/SwapnaDecoder.js';
-import { getPresignedUrl, generateUploadUrl } from '../utils/storage.js';
+import { generateUploadUrl } from '../utils/storage.js';
+import { withSignedMedia } from '../utils/mediaUrls.js';
 import { authenticateToken } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import { cacheGet } from '../utils/responseCache.js';
@@ -13,6 +14,14 @@ import {
 } from '../services/swapnaInterpretService.js';
 
 const router = express.Router();
+
+// Signed thumbnail for app clients. Same helper as puja/meditation: it also covers R2 URLs (the old code only
+// re-signed s3.amazonaws.com ones, so R2 thumbnails expired/403'd) and a stray space in a stored URL no longer breaks it.
+const signThumbnail = (dream) =>
+  withSignedMedia(
+    typeof dream.thumbnailUrl === 'string' ? { ...dream, thumbnailUrl: dream.thumbnailUrl.trim() } : dream,
+    ['thumbnail']
+  );
 
 // AI calls cost money: cap per logged-in user (runs after authenticateToken, so req.user exists)
 const interpretLimiter = rateLimit({
@@ -151,29 +160,9 @@ router.get('/', cacheGet({ ttlSeconds: 120, tag: 'swapna' }), async (req, res) =
       .sort({ sortOrder: 1, createdAt: -1 })
       .lean();
     
-    // Generate presigned URLs for thumbnails
-    const dreamsWithSignedUrls = await Promise.all(
-      dreams.map(async (dream) => {
-        if (dream.thumbnailKey) {
-          try {
-            dream.thumbnailUrl = await getPresignedUrl(dream.thumbnailKey);
-          } catch (error) {
-            console.error(`Error generating presigned URL for ${dream.thumbnailKey}:`, error);
-          }
-        } else if (dream.thumbnailUrl && dream.thumbnailUrl.includes('s3.amazonaws.com')) {
-          try {
-            const url = new URL(dream.thumbnailUrl);
-            const key = url.pathname.substring(1);
-            dream.thumbnailUrl = await getPresignedUrl(key);
-          } catch (error) {
-            console.error(`Error extracting key from URL:`, error);
-          }
-        }
-        
-        return dream;
-      })
-    );
-    
+    // Fresh signed thumbnail URLs (stored key, or our own S3/R2 URL); other hosts are served as stored
+    const dreamsWithSignedUrls = await Promise.all(dreams.map(signThumbnail));
+
     res.json(dreamsWithSignedUrls);
   } catch (error) {
     console.error('Error fetching dream symbols:', error);
@@ -190,27 +179,12 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Dream symbol not found' });
     }
     
-    // Generate presigned URL for thumbnail
-    if (dream.thumbnailKey) {
-      try {
-        dream.thumbnailUrl = await getPresignedUrl(dream.thumbnailKey);
-      } catch (error) {
-        console.error(`Error generating presigned URL for ${dream.thumbnailKey}:`, error);
-      }
-    } else if (dream.thumbnailUrl && dream.thumbnailUrl.includes('s3.amazonaws.com')) {
-      try {
-        const url = new URL(dream.thumbnailUrl);
-        const key = url.pathname.substring(1);
-        dream.thumbnailUrl = await getPresignedUrl(key);
-      } catch (error) {
-        console.error(`Error extracting key from URL:`, error);
-      }
-    }
-    
+    const signedDream = await signThumbnail(dream);
+
     // Increment view count
     await SwapnaDecoder.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } });
     
-    res.json(dream);
+    res.json(signedDream);
   } catch (error) {
     console.error('Error fetching dream symbol:', error);
     res.status(500).json({ error: 'Failed to fetch dream symbol', message: error.message });

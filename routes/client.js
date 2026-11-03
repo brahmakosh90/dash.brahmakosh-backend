@@ -1644,17 +1644,59 @@ router.get('/users/:userId/panchang', authenticate, authorize('client', 'admin',
       });
     }
 
+    // Optional overrides from the app: current coordinates, timezone and a cache bypass.
+    // Without these a cached day was served for the wrong city and could never be refreshed.
+    const forceRefresh = req.query.forceRefresh === 'true' || req.query.forceRefresh === '1';
+    let reqLat = null;
+    let reqLon = null;
+    if (req.query.lat !== undefined || req.query.lon !== undefined) {
+      reqLat = Number(req.query.lat);
+      reqLon = Number(req.query.lon);
+      if (req.query.lat === '' || req.query.lon === '' || !Number.isFinite(reqLat) || !Number.isFinite(reqLon) ||
+          reqLat < -90 || reqLat > 90 || reqLon < -180 || reqLon > 180) {
+        return res.status(400).json({
+          success: false,
+          message: 'lat and lon must both be valid coordinates (lat -90..90, lon -180..180)'
+        });
+      }
+    }
+    let tzone;
+    if (req.query.tz !== undefined && req.query.tz !== '') {
+      tzone = Number(req.query.tz);
+      if (!Number.isFinite(tzone) || tzone < -12 || tzone > 14) {
+        return res.status(400).json({
+          success: false,
+          message: 'tz must be a number of hours from UTC between -12 and 14 (e.g. 5.5)'
+        });
+      }
+    }
+
+    // Location used for the lookup: explicit query coordinates, else the user's stored live location
+    const liveLat = user.liveLocation?.latitude;
+    const liveLon = user.liveLocation?.longitude;
+    const hasLiveLocation = liveLat !== null && liveLat !== undefined && liveLon !== null && liveLon !== undefined;
+    const effLat = reqLat !== null ? reqLat : (hasLiveLocation ? liveLat : null);
+    const effLon = reqLon !== null ? reqLon : (hasLiveLocation ? liveLon : null);
+
     // STEP 1: Check if panchang data exists in DB for this date
-    const panchangData = await Panchang.findOne({
-      userId,
-      dateKey: date
-    }).lean();
+    let panchangData = null;
+    if (!forceRefresh) {
+      panchangData = await Panchang.findOne({
+        userId,
+        dateKey: date
+      }).lean();
+      // A stored day calculated for a different city (sunrise, muhurat differ) is stale for this request
+      if (panchangData && effLat !== null && !panchangService.isSameLocation(panchangData.location, effLat, effLon)) {
+        console.log('[Client API] Cached panchang is for a different location, recalculating');
+        panchangData = null;
+      }
+    }
 
     if (panchangData) {
       console.log('[Client API] Panchang data found in DB for date:', date);
       
       // Daily nakshatra prediction is always for today (even when requesting another date)
-      const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const todayKey = panchangService.getTodayKey(new Date());
       let dailyNakshatraPrediction = panchangData.dailyNakshatraPrediction;
       if (date !== todayKey) {
         const todayPanchang = await Panchang.findOne({ userId, dateKey: todayKey }).select('dailyNakshatraPrediction').lean();
@@ -1698,11 +1740,7 @@ router.get('/users/:userId/panchang', authenticate, authorize('client', 'admin',
     // STEP 2: Panchang not found in DB - try to fetch using user's liveLocation
     console.log('[Client API] No panchang data found in DB for date:', date);
     
-    // Check if user has live location
-    const hasLocation = user.liveLocation?.latitude !== null && 
-                       user.liveLocation?.latitude !== undefined &&
-                       user.liveLocation?.longitude !== null && 
-                       user.liveLocation?.longitude !== undefined;
+    const hasLocation = effLat !== null && effLon !== null;
 
     if (!hasLocation) {
       // No live location - cannot auto-fetch
@@ -1734,10 +1772,11 @@ router.get('/users/:userId/panchang', authenticate, authorize('client', 'admin',
       const fetchedPanchangData = await panchangService.getCompletePanchangData(
         userId,
         requestDate.toISOString(),
-        user.liveLocation.latitude,
-        user.liveLocation.longitude,
-        false, // Don't force refresh
-        user.profile || null
+        effLat,
+        effLon,
+        forceRefresh,
+        user.profile || null,
+        { tzone }
       );
 
       // Enrich with numero daily prediction (lucky number, prediction for the day)
@@ -1752,7 +1791,7 @@ router.get('/users/:userId/panchang', authenticate, authorize('client', 'admin',
       }
 
       // Daily nakshatra prediction is always for today
-      const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const todayKey = panchangService.getTodayKey(new Date());
       let dailyNakshatraPrediction = fetchedPanchangData.dailyNakshatraPrediction;
       if (date !== todayKey) {
         const todayPanchang = await Panchang.findOne({ userId, dateKey: todayKey }).select('dailyNakshatraPrediction').lean();
@@ -1921,7 +1960,7 @@ router.post('/users/:userId/panchang', authenticate, authorize('client', 'admin'
       console.log('[Client API] Panchang data already exists for date:', dateKey);
       
       // Daily nakshatra prediction is always for today
-      const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const todayKey = panchangService.getTodayKey(new Date());
       let dailyNakshatraPrediction = existingData.dailyNakshatraPrediction;
       if (dateKey !== todayKey) {
         const todayPanchang = await Panchang.findOne({ userId, dateKey: todayKey }).select('dailyNakshatraPrediction').lean();
@@ -1977,7 +2016,7 @@ router.post('/users/:userId/panchang', authenticate, authorize('client', 'admin'
     );
 
     // Daily nakshatra prediction is always for today
-    const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+    const todayKey = panchangService.getTodayKey(new Date());
     let dailyNakshatraPrediction = panchangData.dailyNakshatraPrediction;
     if (dateKey !== todayKey) {
       const todayPanchang = await Panchang.findOne({ userId, dateKey: todayKey }).select('dailyNakshatraPrediction').lean();
