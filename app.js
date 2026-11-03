@@ -164,6 +164,7 @@ app.use(invalidateCacheOnWrite({
   '/api/client':         '*',
   '/api/mobile/courses': 'courses',
   '/api/mobile/user/profile': 'userprofile',
+  '/api/mobile/spiritual-checkin': 'checkin',
 }));
 
 // ─── Static files ─────────────────────────────────────────────────────────────

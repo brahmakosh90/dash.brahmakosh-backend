@@ -31,7 +31,7 @@ const router = express.Router();
  * Get complete spiritual check-in page data (activities + user stats)
  * Requires authentication for user stats
  */
-router.get('/spiritual-checkin', authenticateToken, async (req, res) => {
+router.get('/spiritual-checkin', authenticateToken, cacheGet({ ttlSeconds: 60, tag: 'checkin', perUser: true }), async (req, res) => {
   try {
     const userId = req.user._id || req.user.userId;
     const clientId = req.user.clientId || req.user.tokenClientId;
@@ -47,7 +47,7 @@ router.get('/spiritual-checkin', authenticateToken, async (req, res) => {
       clientId
         ? SpiritualActivity.find({ clientId: clientId, isActive: true, isDeleted: false }).sort({ createdAt: -1 })
         : Promise.resolve([]),
-      SpiritualSession.find({ userId }).sort({ createdAt: -1 }).lean(),
+      SpiritualSession.find({ userId }).sort({ createdAt: -1 }).limit(200).lean(),
       User.findById(userId).select('karmaPoints').lean(),
       KarmaPointsTransaction.find({ userId }).select('amount').lean(),
       RewardRedemption.find({ userId, status: 'completed' }).select('karmaPointsSpent').lean()
