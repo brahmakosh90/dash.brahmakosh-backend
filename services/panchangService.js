@@ -13,10 +13,8 @@ class PanchangService {
     // Create axios instance with basic auth
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-astrologyapi-key': this.apiKey
-      },
+      auth: { username: this.apiUserId, password: this.apiKey },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       timeout: 30000
     });
   }
@@ -367,11 +365,18 @@ class PanchangService {
    * Fetch chaughadiya muhurta from API
    */
   async fetchChaughadiyaMuhurta(requestData) {
-    return this.withRetry(async () => {
+    try {
       console.log('[Panchang Service] Fetching chaughadiya_muhurta...');
       const response = await this.apiClient.post('/chaughadiya_muhurta', this.toUrlEncoded(requestData));
+      if (response.data?.status === false) {
+        console.warn('[Panchang Service] chaughadiya_muhurta not available in plan:', response.data.msg);
+        return { chaughadiya: { day: [], night: [] } };
+      }
       return response.data;
-    });
+    } catch (error) {
+      console.warn('[Panchang Service] chaughadiya_muhurta error:', error.message);
+      return { chaughadiya: { day: [], night: [] } };
+    }
   }
 
   /**
