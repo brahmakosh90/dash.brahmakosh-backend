@@ -136,6 +136,13 @@ const signUrlUncached = async (mode, key, expiresIn) => {
 };
 
 export const getPresignedUrl = async (key, expiresIn = 604800) => {
+  // If CloudFront is configured, return a direct CDN URL (no signing needed, much faster)
+  const cdnDomain = (process.env.CLOUDFRONT_DOMAIN || '').trim();
+  if (cdnDomain) {
+    const cleanKey = key.startsWith('http') ? new URL(key).pathname.substring(1) : key;
+    return `${cdnDomain}/${cleanKey}`;
+  }
+
   const mode = await getStorageMode();
   const cacheKey = `${mode}|${expiresIn}|${key}`;
   const hit = signedUrlCache.get(cacheKey);

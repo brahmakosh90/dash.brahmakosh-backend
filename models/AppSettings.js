@@ -19,7 +19,7 @@ const appSettingsSchema = new mongoose.Schema({
   storageMode: {
     type: String,
     enum: ['s3_only', 'r2_only', 'both'],
-    default: 'r2_only'
+    default: 's3_only'
   },
 
   // Stripe / credits settings (managed from admin dashboard)
