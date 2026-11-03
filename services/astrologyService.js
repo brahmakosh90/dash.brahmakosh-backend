@@ -10,10 +10,11 @@ class AstrologyService {
 
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-astrologyapi-key': this.apiKey
+      auth: {
+        username: process.env.ASTROLOGY_API_USER_ID,
+        password: this.apiKey
       },
+      headers: { 'Content-Type': 'application/json' },
       timeout: 30000
     });
   }
