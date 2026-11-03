@@ -31,56 +31,36 @@ if (!JWT_SECRET) {
 // Middleware to authenticate
 const authenticate = async (req, res, next) => {
   try {
-    console.log('🔐 Authentication middleware started');
-    console.log('📋 Headers:', req.headers);
-    
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    
     if (!token) {
-      console.log('❌ No token provided');
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    console.log('🔑 Token received:', token.substring(0, 20) + '...');
-
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('✅ Token decoded:', decoded);
-    
     let user;
     if (decoded.role === 'partner') {
-      const partnerIdFromToken = decoded.userId || decoded.partnerId; // Support both
+      const partnerIdFromToken = decoded.userId || decoded.partnerId;
       user = await Partner.findById(partnerIdFromToken);
       req.userId = partnerIdFromToken;
       req.userType = 'partner';
     } else if (decoded.role === 'user') {
-      console.log('👤 User type: USER');
       user = await User.findById(decoded.userId);
       req.userId = decoded.userId;
       req.userType = 'user';
     }
 
     if (!user) {
-      console.log('❌ User not found in database');
-      return res.status(401).json({
-        success: false,
-        message: 'User not found'
-      });
+      return res.status(401).json({ success: false, message: 'User not found' });
     }
 
-    console.log('✅ User authenticated:', { id: req.userId, type: req.userType });
     req.user = user;
     next();
   } catch (error) {
-    console.error('❌ Authentication error:', error.message);
-    console.error('Stack:', error.stack);
-    res.status(401).json({
-      success: false,
-      message: 'Invalid token',
-      error: error.message
-    });
+    // Only log unexpected errors, not normal expired/invalid token cases
+    if (error.name !== 'TokenExpiredError' && error.name !== 'JsonWebTokenError') {
+      console.error('❌ Authentication error:', error.message);
+    }
+    res.status(401).json({ success: false, message: 'Invalid token' });
   }
 };
 
