@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { attachVerseCountHooks } from '../utils/scriptureCounts.js';
 
 const shivPuranVerseSchema = new mongoose.Schema({
   partId: {
@@ -52,5 +53,7 @@ const shivPuranVerseSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 shivPuranVerseSchema.index({ partId: 1, verseNumber: 1, clientId: 1 }, { unique: true });
+
+attachVerseCountHooks(shivPuranVerseSchema, { parentModel: 'ShivPuran', parentField: 'partId' });
 
 export default mongoose.model('ShivPuranVerse', shivPuranVerseSchema);

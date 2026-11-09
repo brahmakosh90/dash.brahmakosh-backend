@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { attachVerseCountHooks } from '../utils/scriptureCounts.js';
 
 const ramayanaVerseSchema = new mongoose.Schema({
   kandaId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ramayana', required: true },
@@ -14,5 +15,7 @@ const ramayanaVerseSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 ramayanaVerseSchema.index({ kandaId: 1, verseNumber: 1, clientId: 1 }, { unique: true });
+
+attachVerseCountHooks(ramayanaVerseSchema, { parentModel: 'Ramayana', parentField: 'kandaId' });
 
 export default mongoose.model('RamayanaVerse', ramayanaVerseSchema);

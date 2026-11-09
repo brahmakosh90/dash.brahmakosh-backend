@@ -2,7 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import multer from 'multer';
 import Shloka from '../models/Shloka.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { authMiddleware } from '../middleware/auth.js';
 import { getPresignedUrl, generateUploadUrl, uploadBuffer, extractS3KeyFromUrl } from '../utils/storage.js';
 import { signStoredMedia } from '../utils/mediaUrls.js';
 

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { attachVerseCountHooks } from '../utils/scriptureCounts.js';
 
 const durgaSaptashatiVerseSchema = new mongoose.Schema({
   chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'DurgaSaptashati', required: true },
@@ -14,5 +15,7 @@ const durgaSaptashatiVerseSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 durgaSaptashatiVerseSchema.index({ chapterId: 1, verseNumber: 1, clientId: 1 }, { unique: true });
+
+attachVerseCountHooks(durgaSaptashatiVerseSchema, { parentModel: 'DurgaSaptashati', parentField: 'chapterId' });
 
 export default mongoose.model('DurgaSaptashatiVerse', durgaSaptashatiVerseSchema);

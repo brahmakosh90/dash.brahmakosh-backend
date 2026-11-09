@@ -3,7 +3,7 @@ import express from 'express';
 import SpiritualReward from '../models/SpiritualReward.js';
 import User from '../models/User.js';
 import { generateUploadUrl, deleteFile, getPresignedUrl } from '../utils/storage.js';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 

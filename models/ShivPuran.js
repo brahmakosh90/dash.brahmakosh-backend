@@ -21,6 +21,8 @@ const shivPuranSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  // Real number of verse documents; maintained by hooks on the verse model. verseCount is the *declared* count.
+  actualVerseCount: { type: Number, default: 0, min: 0 },
   imageUrl: {
     type: String,
     default: null

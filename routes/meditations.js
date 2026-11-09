@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import multer from 'multer';
 import Meditation from '../models/Meditation.js';
 import Client from '../models/Client.js';
-import { authenticate } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/auth.js';
 import { uploadFile, deleteFile, generateUploadUrl, getPresignedUrl, extractS3KeyFromUrl } from '../utils/storage.js';
 import { withSignedMedia, isOwnStorageUrl } from '../utils/mediaUrls.js';
 import { normalizeCategory, normalizeInstructions } from '../utils/meditationContent.js';

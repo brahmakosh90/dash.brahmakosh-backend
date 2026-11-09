@@ -4,27 +4,62 @@ import Client from '../models/Client.js';
 import User from '../models/User.js';
 import Partner from '../models/Partner.js';
 import { getCachedUser, setCachedUser } from '../utils/responseCache.js';
+import { getJwtSecretProblem } from '../config/validateEnv.js';
 
 
 // Per-request success logs were synchronous stdout writes on every authenticated call (and printed emails).
 // Opt in with AUTH_DEBUG=true when debugging auth; failures are still always logged.
 const authDebug = process.env.AUTH_DEBUG === 'true' ? (...args) => console.log(...args) : () => {};
-const getJwtSecret = () => {
+const fatal = (msg) => {
+  console.error(`[Auth] FATAL: ${msg}`);
+  process.exit(1);
+};
+
+// Hard-fail on a missing secret everywhere, and on a weak/placeholder secret in production.
+const resolveJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    console.error('[Auth] FATAL: JWT_SECRET environment variable is not set');
-    process.exit(1);
+  const problem = getJwtSecretProblem(secret);
+  if (!secret) fatal('JWT_SECRET environment variable is not set');
+  if (problem) {
+    if (process.env.NODE_ENV === 'production') fatal(problem);
+    console.warn(`[Auth] WARNING: ${problem}. This is only tolerated outside production.`);
   }
   return secret;
 };
 
-export const JWT_SECRET = getJwtSecret();
+export const JWT_SECRET = resolveJwtSecret();
+
+// Optional previous secret: tokens signed with it still verify, new tokens never use it.
+// Enables zero-downtime rotation (set JWT_SECRET_PREVIOUS=<old>, JWT_SECRET=<new>, remove old after tokens expire).
+const PREVIOUS_SECRET = (() => {
+  const prev = process.env.JWT_SECRET_PREVIOUS;
+  if (!prev) return null;
+  const problem = getJwtSecretProblem(prev, { label: 'JWT_SECRET_PREVIOUS' });
+  if (problem) {
+    if (process.env.NODE_ENV === 'production') fatal(problem);
+    console.warn(`[Auth] WARNING: ${problem}`);
+  }
+  return prev;
+})();
+
+const verifyWithRotation = (token) => {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    if (PREVIOUS_SECRET && err.name === 'JsonWebTokenError' && /signature/i.test(err.message)) {
+      return jwt.verify(token, PREVIOUS_SECRET);
+    }
+    throw err;
+  }
+};
 
 // Authentication middleware - works with all models
 export const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
+    const rawHeader = authHeader || req.headers.authorization;
+    // Accept both "Bearer <token>" and a bare token
+    const token = rawHeader?.startsWith('Bearer ') ? rawHeader.slice(7) : rawHeader;
     
     if (!token) {
       return res.status(401).json({ 
@@ -35,11 +70,33 @@ export const authenticate = async (req, res, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = verifyWithRotation(token);
     } catch (verifyError) {
-      throw verifyError;
+      if (verifyError.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          success: false,
+          message: 'Token expired. Please login again.',
+          error: process.env.NODE_ENV === 'development' ? verifyError.message : undefined
+        });
+      }
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token. Authorization denied.',
+        error: process.env.NODE_ENV === 'development' ? verifyError.message : undefined
+      });
     }
-    
+
+    // Dual token format: old { userId, role, clientId } and new { id, role, email }
+    const tokenUserId = decoded.userId || decoded.id;
+    if (!tokenUserId) {
+      return res.status(401).json({ success: false, message: 'Invalid token: User ID missing. Authorization denied.' });
+    }
+    if (!decoded.role) {
+      return res.status(401).json({ success: false, message: 'Invalid token: Role missing. Authorization denied.' });
+    }
+    decoded.userId = tokenUserId;
+    req.decodedEmail = decoded.email;
+
     // Determine model based on role in token
     let user = null;
     if (decoded.role === 'super_admin' || decoded.role === 'admin') {
@@ -86,6 +143,9 @@ export const authenticate = async (req, res, next) => {
           user.role = 'partner';
         }
       }
+    }
+    else {
+      return res.status(401).json({ success: false, message: `Invalid role in token: ${decoded.role}` });
     }
     
     authDebug('[Auth Middleware] User found:', {
@@ -175,17 +235,43 @@ export const authorize = (...roles) => {
   };
 };
 
-// Generate JWT token with clientId for users
-export const generateToken = (userId, role, clientId = null) => {
-  const payload = { userId, role };
-  
-  // Add clientId to token for both users and clients
-  if (clientId) {
-    payload.clientId = clientId;
-  }
-  
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+// Token lifetimes are configurable; defaults preserve the previous 7d behaviour.
+// Recommended hardening once clients support refresh: JWT_EXPIRES_IN=24h, JWT_ADMIN_EXPIRES_IN=1h.
+const expiryFor = (role) =>
+  role === 'admin' || role === 'super_admin'
+    ? process.env.JWT_ADMIN_EXPIRES_IN || process.env.JWT_EXPIRES_IN || '7d'
+    : process.env.JWT_EXPIRES_IN || '7d';
+
+/**
+ * Generate a JWT. Payload carries both formats (userId + id) so old and new consumers work.
+ */
+export const generateToken = (userId, role, clientId = null, email = null) => {
+  const payload = { userId, id: userId, role: String(role) };
+  if (email) payload.email = email;
+  if (clientId) payload.clientId = clientId;
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: expiryFor(role) });
 };
 
-// Alias for authenticate function (for backward compatibility)
+/** Verify a token without a database lookup. Returns null when invalid. */
+export const verifyToken = (token) => {
+  try {
+    return verifyWithRotation(token);
+  } catch {
+    return null;
+  }
+};
+
+/** Decode without verification (never use for authorization decisions). */
+export const decodeToken = (token) => {
+  try {
+    return jwt.decode(token);
+  } catch {
+    return null;
+  }
+};
+
+// Aliases kept for backward compatibility
 export const authenticateToken = authenticate;
+export const authMiddleware = authenticate;
+
+export default { authenticate, authorize, generateToken, verifyToken, decodeToken, authenticateToken, authMiddleware, JWT_SECRET };

@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 import Client from '../models/Client.js';
 import User from '../models/User.js';
 import AppSettings from '../models/AppSettings.js';
+import CronJobLog from '../models/CronJobLog.js';
+import { getScriptureCoverage } from '../utils/scriptureRegistry.js';
+import PanchangAuditLog from '../models/PanchangAuditLog.js';
 import { authenticate, authorize, generateToken } from '../middleware/auth.js';
 import { listPrompts, updatePrompt, ensurePrompt } from '../services/promptService.js';
 
@@ -11,6 +14,39 @@ const router = express.Router();
 // All routes require admin authentication
 router.use(authenticate);
 router.use(authorize('admin', 'super_admin'));
+
+// GET /api/admin/panchang/audit-log?days=30
+router.get('/panchang/audit-log', async (req, res) => {
+  try {
+    const days = Math.min(Number(req.query.days) || 30, 365);
+    const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+    const rows = await PanchangAuditLog.find({ createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(1000).lean();
+    res.json({ success: true, count: rows.length, data: rows });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load panchang audit log' });
+  }
+});
+
+// GET /api/admin/scripture/coverage
+router.get('/scripture/coverage', async (req, res) => {
+  try {
+    res.json({ success: true, data: await getScriptureCoverage() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to compute scripture coverage' });
+  }
+});
+
+// GET /api/admin/cron-jobs/health?jobName=&limit=
+router.get('/cron-jobs/health', async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const filter = req.query.jobName ? { jobName: String(req.query.jobName) } : {};
+    const runs = await CronJobLog.find(filter).sort({ runAt: -1 }).limit(limit).lean();
+    res.json({ success: true, data: runs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to load cron job health' });
+  }
+});
 
 // Get all clients (super_admin: all; admin: those with matching adminId or unassigned)
 router.get('/clients', async (req, res) => {

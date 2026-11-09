@@ -1,5 +1,6 @@
 // Entry point for the application
 import 'dotenv/config';
+import './config/startupCheck.js';
 
 import server from './app.js';
 import './services/cronJobs.js';

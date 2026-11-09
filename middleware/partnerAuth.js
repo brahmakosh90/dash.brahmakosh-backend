@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import Partner from '../models/Partner.js';
 import User from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production-to-a-strong-random-string';
+import { JWT_SECRET } from './auth.js';
 
 // Authenticate Partner
 export const authenticatePartner = async (req, res, next) => {

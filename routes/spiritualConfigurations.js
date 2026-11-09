@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import { authenticateToken } from '../middleware/auth.js';
 import SpiritualConfiguration from '../models/SpiritualConfiguration.js';
 
 const router = express.Router();

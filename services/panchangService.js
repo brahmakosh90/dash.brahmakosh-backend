@@ -2,6 +2,8 @@
 
 import axios from 'axios';
 import Panchang from '../models/Panchang.js';
+import PanchangAuditLog from '../models/PanchangAuditLog.js';
+import { crossValidatePaksha } from '../utils/panchangValidation.js';
 
 class PanchangService {
   constructor() {
@@ -217,6 +219,13 @@ class PanchangService {
         nakshatraPredictionData
       );
 
+      // Step 5b: Cross-validate paksha against the tithi number (pure, synchronous, no extra I/O)
+      const pakshaCheck = crossValidatePaksha(advancedPanchangData);
+      if (pakshaCheck.discrepancy) {
+        panchangData.advancedPanchang.paksha = pakshaCheck.value;
+        console.error(`[Panchang Service] CRITICAL paksha mismatch for ${todayKey}: ${pakshaCheck.discrepancy.note} -> ${pakshaCheck.discrepancy.resolution}`);
+      }
+
       // Step 6: Save to database (upsert for today's date)
       const savedData = await Panchang.findOneAndUpdate(
         { userId, dateKey: todayKey },
@@ -226,6 +235,9 @@ class PanchangService {
 
       console.log('[Panchang Service] Data saved to DB for user:', userId, 'Date:', todayKey);
 
+      // Audit logging runs after the data is saved and is never awaited, so response time is unaffected.
+      this.recordPakshaAudit(userId, todayKey, pakshaCheck, advancedPanchangData.paksha);
+
       // Step 7: Return formatted response
       return this.formatPanchangResponse(savedData);
 
@@ -233,6 +245,21 @@ class PanchangService {
       console.error('[Panchang Service] Error:', error);
       throw new Error(`Failed to get panchang data: ${error.message}`);
     }
+  }
+
+  /**
+   * Fire-and-forget persistence of paksha discrepancies / heuristic warnings.
+   */
+  recordPakshaAudit(userId, dateKey, check, apiPaksha) {
+    const docs = [];
+    if (check.discrepancy) {
+      docs.push({ dateKey, userId, ...check.discrepancy });
+    }
+    for (const note of check.warnings) {
+      docs.push({ dateKey, userId, field: 'paksha', apiValue: apiPaksha || '', calculatedValue: '', resolution: 'heuristic_warning', severity: 'WARN', note });
+    }
+    if (!docs.length) return;
+    PanchangAuditLog.insertMany(docs).catch((err) => console.error('[Panchang Service] Failed to write audit log:', err.message));
   }
 
   /**

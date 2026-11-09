@@ -5,6 +5,8 @@ const ramayanaSchema = new mongoose.Schema({
   kandaNumber: { type: Number, required: true, min: 1 },
   description: { type: String, required: true, trim: true },
   verseCount: { type: Number, required: true, min: 1 },
+  // Real number of verse documents; maintained by hooks on the verse model. verseCount is the *declared* count.
+  actualVerseCount: { type: Number, default: 0, min: 0 },
   imageUrl: { type: String, default: null },
   status: { type: String, enum: ['active', 'inactive'], default: 'active' },
   clientId: { type: String, required: true }

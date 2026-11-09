@@ -46,6 +46,11 @@ const withSignedUrl = async (doc) => {
   if (obj.audioUrl) {
     obj.audioUrl = await signStoredMedia(obj.audioUrl);
   }
+  if (obj.verseCount !== undefined) {
+    obj.declaredCount = obj.verseCount;
+    obj.actualCount = obj.actualVerseCount ?? 0;
+    obj.isComplete = obj.actualCount >= obj.declaredCount;
+  }
   return obj;
 };
 

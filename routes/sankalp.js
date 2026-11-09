@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import multer from 'multer';
 import Sankalp from '../models/Sankalp.js';
 import Client from '../models/Client.js';
-import { authenticate } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/auth.js';
 import { uploadFile, deleteFile, generateUploadUrl, getPresignedUrl, extractS3KeyFromUrl } from '../utils/storage.js';
 
 const router = express.Router();

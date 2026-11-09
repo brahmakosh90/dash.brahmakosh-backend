@@ -2,7 +2,7 @@ import express from 'express';
 import UserSankalp from '../models/UserSankalp.js';
 import Sankalp from '../models/Sankalp.js';
 import User from '../models/User.js';
-import { authenticate } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/auth.js';
 import notificationService from '../services/notificationService.js';
 
 const router = express.Router();

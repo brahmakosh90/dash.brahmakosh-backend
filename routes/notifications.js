@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { authenticate } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/auth.js';
 import notificationService from '../services/notificationService.js';
 import User from '../models/User.js';
 import ClientNotificationGroup from '../models/ClientNotificationGroup.js';

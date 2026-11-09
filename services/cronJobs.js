@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import UserSankalp from '../models/UserSankalp.js';
 import notificationService from './notificationService.js';
+import CronJobLog from '../models/CronJobLog.js';
+import { runAbandonmentCheck } from './sankalpAbandonment.js';
 
 // Track sent reminders to avoid duplicates (in-memory cache)
 const sentRemindersToday = new Set();
@@ -102,59 +104,8 @@ cron.schedule('* * * * *', async () => {
 // Check for abandoned sankalpas - runs daily at midnight
 cron.schedule('0 0 * * *', async () => {
   console.log('Running sankalp abandonment check...');
-  
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Find all active sankalpas
-    const activeSankalpas = await UserSankalp.find({ status: 'active' });
-    
-    let abandonedCount = 0;
-    
-    for (const userSankalp of activeSankalpas) {
-      // Check last 3 days for consecutive not_reported
-      let consecutiveMissed = 0;
-      
-      for (let i = 1; i <= 3; i++) {
-        const checkDate = new Date(today);
-        checkDate.setDate(checkDate.getDate() - i);
-        checkDate.setHours(0, 0, 0, 0);
-        
-        const report = userSankalp.dailyReports.find(r => {
-          const reportDate = new Date(r.date);
-          reportDate.setHours(0, 0, 0, 0);
-          return reportDate.getTime() === checkDate.getTime();
-        });
-        
-        if (report && report.status === 'not_reported') {
-          consecutiveMissed++;
-        } else {
-          break;
-        }
-      }
-      
-      // Abandon if 3+ consecutive days missed
-      if (consecutiveMissed >= 3) {
-        userSankalp.status = 'abandoned';
-        await userSankalp.save();
-        abandonedCount++;
-        
-        // Send abandonment notification
-        await notificationService.sendAbandonmentNotification(
-          userSankalp.userId,
-          userSankalp._id,
-          userSankalp.sankalpId.title
-        );
-      }
-    }
-    
-    if (abandonedCount > 0) {
-      console.log(`${abandonedCount} sankalpas marked as abandoned`);
-    }
-  } catch (error) {
-    console.error('Error checking abandoned sankalpas:', error);
-  }
+  const summary = await runAbandonmentCheck({ UserSankalp, notificationService, CronJobLog });
+  console.log(`Abandonment check done: ${summary.abandoned} abandoned, ${summary.processed} processed, ${summary.failed} failed`);
 });
 
 console.log('✅ Sankalp cron jobs scheduled:');

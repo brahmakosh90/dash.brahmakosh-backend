@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production-to-a-strong-random-string';
+import { JWT_SECRET } from '../middleware/auth.js';
 
 // Extract clientId from JWT token
 export const getClientIdFromToken = async (req) => {
