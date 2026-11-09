@@ -73,7 +73,7 @@ router.post('/synthesize', authenticate, authorize('client', 'admin', 'super_adm
       });
     }
 
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     const base64 = buffer.toString('base64');
 
     res.json({
