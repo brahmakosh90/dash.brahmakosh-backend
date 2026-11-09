@@ -1,7 +1,6 @@
 import express from 'express';
 import axios from 'axios';
 import crypto from 'crypto';
-import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import User from '../models/User.js';
 import AuditLog from '../models/AuditLog.js';
@@ -16,9 +15,7 @@ const PROTECTED_PROFILE_FIELDS = new Set([
   'passwordResetToken', 'passwordResetExpires',
 ]);
 
-const byEmailSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(255),
-});
+const isValidEmail = (val) => typeof val === 'string' && val.length <= 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
 
 // 5 sync requests per user per hour (keyed by authenticated user, never by IP)
 const byEmailLimiter = rateLimit({
@@ -94,11 +91,11 @@ router.put('/profile', async (req, res) => {
 // POST /api/users/by-email  { email }
 router.post('/by-email', byEmailLimiter, async (req, res) => {
   try {
-    const parsed = byEmailSchema.safeParse(req.body || {});
-    if (!parsed.success) {
+    const rawEmail = req.body?.email;
+    if (!isValidEmail(rawEmail)) {
       return res.status(400).json({ success: false, message: 'A valid email (max 255 chars) is required' });
     }
-    const email = parsed.data.email;
+    const email = rawEmail.trim().toLowerCase();
 
     // Ownership: users may only sync themselves; admins may sync anyone.
     const isAdmin = ADMIN_ROLES.includes(req.user.role);
